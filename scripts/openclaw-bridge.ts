@@ -16,6 +16,7 @@
  */
 
 import { parseArgs } from "node:util";
+import crypto from "node:crypto";
 
 const { values: args } = parseArgs({
   options: {
@@ -32,6 +33,31 @@ const AUTH_TOKEN = args.token!;
 const SESSION_KEY = args.session!;
 const GATEWAY_ID = "openclaw-bridge";
 const GATEWAY_TOKEN = "bridge-openclaw-stable-token";
+
+// ---------------------------------------------------------------------------
+// Device Identity (Ed25519 keypair for OpenClaw gateway auth)
+// ---------------------------------------------------------------------------
+
+const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
+
+function base64UrlEncode(buf: Buffer): string {
+  return buf.toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+}
+
+const { publicKey: PUB_KEY, privateKey: PRIV_KEY } = crypto.generateKeyPairSync("ed25519");
+const PUB_KEY_PEM = PUB_KEY.export({ type: "spki", format: "pem" }).toString();
+const PRIV_KEY_PEM = PRIV_KEY.export({ type: "pkcs8", format: "pem" }).toString();
+const PUB_KEY_RAW = (() => {
+  const spki = PUB_KEY.export({ type: "spki", format: "der" }) as Buffer;
+  return spki.subarray(ED25519_SPKI_PREFIX.length);
+})();
+const DEVICE_ID = crypto.createHash("sha256").update(PUB_KEY_RAW).digest("hex");
+const PUB_KEY_B64URL = base64UrlEncode(PUB_KEY_RAW);
+
+function signPayload(payload: string): string {
+  const sig = crypto.sign(null, Buffer.from(payload, "utf8"), PRIV_KEY);
+  return base64UrlEncode(sig);
+}
 
 // ---------------------------------------------------------------------------
 // State
@@ -84,12 +110,10 @@ function handleOpenClawFrame(frame: any) {
       // Response to our requests (connect, chat.send, etc.)
       if (frame.ok === false) {
         console.error(`[openclaw] Request failed:`, frame.error);
+      } else if (frame.payload?.type === "hello-ok") {
+        console.log(`[openclaw] Connected! Server: ${frame.payload.server?.version ?? "unknown"}`);
+        openclawReady = true;
       }
-      break;
-
-    case "hello-ok":
-      console.log(`[openclaw] Connected! Server: ${frame.server ?? "unknown"}`);
-      openclawReady = true;
       break;
   }
 }
@@ -99,17 +123,40 @@ function handleOpenClawEvent(frame: any) {
 
   switch (event) {
     case "connect.challenge": {
-      // Respond with connect handshake
-      // OpenClaw requires minProtocol/maxProtocol and specific client id/mode values
+      // Build device auth signature (v3 payload format)
+      const role = "operator";
+      const scopes = ["operator.admin"];
+      const signedAtMs = Date.now();
+      const nonce = payload?.nonce ?? crypto.randomUUID();
+      const platform = "clawchat-bridge";
+      const clientId = "gateway-client";
+      const clientMode = "backend";
+
+      const authPayload = [
+        "v3", DEVICE_ID, clientId, clientMode, role,
+        scopes.join(","), String(signedAtMs), AUTH_TOKEN || "",
+        nonce, platform, "", // deviceFamily
+      ].join("|");
+      const signature = signPayload(authPayload);
+
       const connectParams: any = {
         minProtocol: 3,
         maxProtocol: 3,
+        role,
         client: {
-          id: "gateway-client",
-          mode: "backend",
+          id: clientId,
+          mode: clientMode,
           version: "0.1.0",
-          platform: "clawchat-bridge",
+          platform,
         },
+        device: {
+          id: DEVICE_ID,
+          publicKey: PUB_KEY_B64URL,
+          signature,
+          signedAt: signedAtMs,
+          nonce,
+        },
+        scopes,
         caps: ["tool-events"],
       };
       if (AUTH_TOKEN) {

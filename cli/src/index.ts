@@ -70,13 +70,15 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  process.stdout.write(`Connecting to ${relayUrl}...\n`);
+  // Ensure the relay URL ends with /ws/app
+  const wsUrl = relayUrl.replace(/\/+$/, "") + "/ws/app";
+  process.stdout.write(`Connecting to ${wsUrl}...\n`);
 
   let chat: ChatHandle | null = null;
   let authenticated = false;
 
   const conn = connect(
-    relayUrl,
+    wsUrl,
     // onMessage — route to chat UI after authentication
     (msg) => {
       if (chat) chat.onMessage(msg);
