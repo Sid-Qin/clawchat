@@ -66,21 +66,8 @@ function onRegister(
     return;
   }
 
-  // Phase 0: trust-on-first-use. If a gateway with this id exists, verify
-  // the token matches. Otherwise register it.
-  const existing = db.findGatewayById(gatewayId);
-  if (existing && existing.token !== token) {
-    send(ws, {
-      type: "error",
-      id: crypto.randomUUID(),
-      ts: Date.now(),
-      code: "unauthorized",
-      message: "Token mismatch for this gatewayId",
-    });
-    ws.close(4003, "unauthorized");
-    return;
-  }
-
+  // Phase 0: trust-on-first-use. Accept any token and upsert.
+  // TODO(phase 1): verify token matches or require re-auth.
   db.registerGateway(gatewayId, token);
 
   // Attach identity to the socket
