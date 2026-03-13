@@ -1,4 +1,6 @@
 import { Database } from "bun:sqlite";
+import { mkdirSync, existsSync } from "node:fs";
+import { dirname } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,6 +68,10 @@ export interface DbStore {
 // ---------------------------------------------------------------------------
 
 export function createDb(path: string): DbStore {
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
   const db = new Database(path);
 
   // Enable WAL mode for better concurrent read performance
