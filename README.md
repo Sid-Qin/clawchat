@@ -19,9 +19,23 @@ Your Phone ──> ClawChat Relay <── Your OpenClaw Gateway (behind NAT)
 - **Multi-gateway** -- connect to multiple OpenClaw instances from one app
 - **Self-hostable relay** -- run your own relay if you prefer
 
+## Project Structure
+
+| Directory | Description |
+|-----------|-------------|
+| `frontend/` | React Native (Expo) mobile app — Discord-style UI for agent chat |
+| `ios/` | Native iOS client (SwiftUI) |
+| `android/` | Native Android client (Jetpack Compose) |
+| `service/` | Relay service backend |
+| `cli/` | Command-line interface |
+| `packages/protocol/` | Shared protocol definitions |
+| `openspec/` | Architecture specifications |
+
 ## Status
 
 Early development. See [architecture specs](openspec/specs/architecture/) for the design.
+
+The `frontend/` directory contains a working React Native prototype with full UI implementation. See [frontend/README.md](frontend/README.md) for setup instructions.
 
 ## License
 
