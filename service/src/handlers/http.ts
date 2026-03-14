@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import type { DbStore } from "../db.js";
 import { stats } from "../connections.js";
 import { generatePairingCode } from "../util.js";
+import { log } from "../log.js";
+import { checkRateLimit } from "../rate-limit.js";
 
 // ---------------------------------------------------------------------------
 // HTTP routes (mounted on Hono)
@@ -9,6 +11,18 @@ import { generatePairingCode } from "../util.js";
 
 export function createHttpRoutes(db: DbStore): Hono {
   const app = new Hono();
+
+  // Rate limit middleware: 30 requests per minute per IP (skip health check)
+  app.use("*", async (c, next) => {
+    if (c.req.path === "/health") return next();
+    const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const rl = checkRateLimit(`http:${ip}`, 30, 60_000);
+    if (!rl.allowed) {
+      log("warn", "rate_limit.http", { ip });
+      return c.json({ error: "Too many requests" }, 429);
+    }
+    return next();
+  });
 
   // Health check
   app.get("/health", (c) => {
@@ -38,7 +52,7 @@ export function createHttpRoutes(db: DbStore): Hono {
 
     const displayCode = `${code.slice(0, 3)}-${code.slice(3)}`;
 
-    console.log(`[http] pairing code generated for ${gateway.gatewayId}: ${displayCode}`);
+    log("info", "http.pair.generate", { gatewayId: gateway.gatewayId, code: displayCode });
 
     return c.json({
       code: displayCode,

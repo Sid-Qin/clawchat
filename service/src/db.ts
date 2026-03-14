@@ -1,6 +1,12 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
+import { createHash } from "node:crypto";
+
+/** SHA-256 hash a string and return hex. */
+function sha256(input: string): string {
+  return createHash("sha256").update(input).digest("hex");
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -9,6 +15,7 @@ import { dirname } from "node:path";
 export interface GatewayRow {
   gatewayId: string;
   token: string;
+  tokenHash: string | null;
   createdAt: number;
 }
 
@@ -34,9 +41,9 @@ export interface PairingCodeRow {
 // ---------------------------------------------------------------------------
 
 export interface DbStore {
-  /** Register or update a gateway. Returns the row. */
-  registerGateway(gatewayId: string, token: string): GatewayRow;
-  /** Find a gateway by its token. */
+  /** Register or update a gateway. Returns the row or null if token mismatch. */
+  registerGateway(gatewayId: string, token: string): GatewayRow | null;
+  /** Find a gateway by its token (plaintext match — for HTTP bearer auth). */
   findGateway(token: string): GatewayRow | null;
   /** Find a gateway by its gatewayId. */
   findGatewayById(gatewayId: string): GatewayRow | null;
@@ -51,13 +58,24 @@ export interface DbStore {
   revokeDevice(deviceId: string): boolean;
   /** Touch the lastSeen timestamp for a device. */
   touchDevice(deviceId: string): void;
+  /** Update a device's token. Returns the new token. */
+  updateDeviceToken(deviceId: string, newToken: string): void;
+  /** Count devices paired to a gateway. */
+  countDevicesByGateway(gatewayId: string): number;
 
   /** Create a pairing code for a gateway. */
   createPairingCode(code: string, gatewayId: string, expiresAt: number): PairingCodeRow;
   /** Redeem a pairing code. Returns the row if valid, null otherwise. */
   redeemPairingCode(code: string): PairingCodeRow | null;
-  /** Delete expired and redeemed codes. */
+  /** Delete expired and redeemed codes + expired/delivered offline messages. */
   cleanExpiredCodes(): number;
+
+  /** Queue a message for an offline device. Enforces per-device cap (100). */
+  queueOfflineMessage(deviceId: string, payload: string): void;
+  /** Get pending offline messages for a device (chronological order). */
+  getOfflineMessages(deviceId: string): { id: number; payload: string }[];
+  /** Mark offline messages as delivered. */
+  markOfflineDelivered(ids: number[]): void;
 
   /** Close the database connection. */
   close(): void;
@@ -83,9 +101,16 @@ export function createDb(path: string): DbStore {
     CREATE TABLE IF NOT EXISTS gateways (
       gatewayId TEXT PRIMARY KEY,
       token TEXT NOT NULL,
+      tokenHash TEXT,
       createdAt INTEGER NOT NULL
     )
   `);
+
+  // Migration: add tokenHash column if not present
+  const cols = db.query("PRAGMA table_info(gateways)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "tokenHash")) {
+    db.run("ALTER TABLE gateways ADD COLUMN tokenHash TEXT");
+  }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS devices (
@@ -108,12 +133,25 @@ export function createDb(path: string): DbStore {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS offline_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      deviceId TEXT NOT NULL REFERENCES devices(deviceId) ON DELETE CASCADE,
+      payload TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      delivered INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
   // Prepared statements
   const stmts = {
-    upsertGateway: db.prepare<GatewayRow, [string, string, number]>(
-      `INSERT INTO gateways (gatewayId, token, createdAt)
-       VALUES (?1, ?2, ?3)
-       ON CONFLICT(gatewayId) DO UPDATE SET token = excluded.token
+    insertGateway: db.prepare<GatewayRow, [string, string, string, number]>(
+      `INSERT INTO gateways (gatewayId, token, tokenHash, createdAt)
+       VALUES (?1, ?2, ?3, ?4)
+       RETURNING *`,
+    ),
+    updateGatewayToken: db.prepare<GatewayRow, [string, string, string]>(
+      `UPDATE gateways SET token = ?2, tokenHash = ?3 WHERE gatewayId = ?1
        RETURNING *`,
     ),
     findGatewayByToken: db.prepare<GatewayRow, [string]>(
@@ -140,6 +178,12 @@ export function createDb(path: string): DbStore {
     touchDevice: db.prepare<void, [number, string]>(
       "UPDATE devices SET lastSeen = ?1 WHERE deviceId = ?2",
     ),
+    updateDeviceToken: db.prepare<void, [string, string]>(
+      "UPDATE devices SET deviceToken = ?1 WHERE deviceId = ?2",
+    ),
+    countDevicesByGateway: db.prepare<{ c: number }, [string]>(
+      "SELECT COUNT(*) as c FROM devices WHERE gatewayId = ?1",
+    ),
 
     insertPairingCode: db.prepare<PairingCodeRow, [string, string, number]>(
       `INSERT INTO pairing_codes (code, gatewayId, expiresAt)
@@ -155,12 +199,46 @@ export function createDb(path: string): DbStore {
     cleanCodes: db.prepare<void, [number]>(
       "DELETE FROM pairing_codes WHERE expiresAt < ?1 OR redeemed = 1",
     ),
+
+    // Offline messages
+    insertOfflineMessage: db.prepare<void, [string, string, number]>(
+      "INSERT INTO offline_messages (deviceId, payload, createdAt) VALUES (?1, ?2, ?3)",
+    ),
+    countOfflineByDevice: db.prepare<{ c: number }, [string]>(
+      "SELECT COUNT(*) as c FROM offline_messages WHERE deviceId = ?1 AND delivered = 0",
+    ),
+    deleteOldestOffline: db.prepare<void, [string]>(
+      "DELETE FROM offline_messages WHERE id = (SELECT id FROM offline_messages WHERE deviceId = ?1 AND delivered = 0 ORDER BY createdAt ASC LIMIT 1)",
+    ),
+    getOfflineMessages: db.prepare<{ id: number; payload: string }, [string]>(
+      "SELECT id, payload FROM offline_messages WHERE deviceId = ?1 AND delivered = 0 ORDER BY createdAt ASC",
+    ),
+    markOfflineDelivered: db.prepare<void, [number]>(
+      "UPDATE offline_messages SET delivered = 1 WHERE id = ?1",
+    ),
+    cleanOffline: db.prepare<void, [number]>(
+      "DELETE FROM offline_messages WHERE delivered = 1 OR createdAt < ?1",
+    ),
   };
 
   return {
     registerGateway(gatewayId, token) {
-      const row = stmts.upsertGateway.get(gatewayId, token, Date.now());
-      return row!;
+      const hash = sha256(token);
+      const existing = stmts.findGatewayById.get(gatewayId);
+
+      if (!existing) {
+        // First registration: store token + hash
+        return stmts.insertGateway.get(gatewayId, token, hash, Date.now())!;
+      }
+
+      // Subsequent registration: verify token hash
+      if (existing.tokenHash && existing.tokenHash !== hash) {
+        // Token mismatch
+        return null;
+      }
+
+      // Token matches (or legacy row without hash) — update
+      return stmts.updateGatewayToken.get(gatewayId, token, hash)!;
     },
 
     findGateway(token) {
@@ -202,6 +280,15 @@ export function createDb(path: string): DbStore {
       stmts.touchDevice.run(Date.now(), deviceId);
     },
 
+    updateDeviceToken(deviceId, newToken) {
+      stmts.updateDeviceToken.run(newToken, deviceId);
+    },
+
+    countDevicesByGateway(gatewayId) {
+      const row = stmts.countDevicesByGateway.get(gatewayId);
+      return row?.c ?? 0;
+    },
+
     createPairingCode(code, gatewayId, expiresAt) {
       const row = stmts.insertPairingCode.get(code, gatewayId, expiresAt);
       return row!;
@@ -216,9 +303,35 @@ export function createDb(path: string): DbStore {
     },
 
     cleanExpiredCodes() {
-      stmts.cleanCodes.run(Date.now());
-      const result = db.query("SELECT changes() as c").get() as { c: number } | null;
-      return result?.c ?? 0;
+      const now = Date.now();
+      stmts.cleanCodes.run(now);
+      const codesResult = db.query("SELECT changes() as c").get() as { c: number } | null;
+      const codesCleaned = codesResult?.c ?? 0;
+
+      // Also clean expired/delivered offline messages (24h TTL)
+      const ttlCutoff = now - 24 * 60 * 60 * 1000;
+      stmts.cleanOffline.run(ttlCutoff);
+
+      return codesCleaned;
+    },
+
+    queueOfflineMessage(deviceId, payload) {
+      // Enforce per-device cap (100)
+      const count = stmts.countOfflineByDevice.get(deviceId);
+      if (count && count.c >= 100) {
+        stmts.deleteOldestOffline.run(deviceId);
+      }
+      stmts.insertOfflineMessage.run(deviceId, payload, Date.now());
+    },
+
+    getOfflineMessages(deviceId) {
+      return stmts.getOfflineMessages.all(deviceId);
+    },
+
+    markOfflineDelivered(ids) {
+      for (const id of ids) {
+        stmts.markOfflineDelivered.run(id);
+      }
     },
 
     close() {

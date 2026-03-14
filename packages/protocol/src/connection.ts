@@ -76,6 +76,8 @@ export interface AppConnected extends BaseMessage {
   gatewayId: string;
   gatewayOnline: boolean;
   agents: string[];
+  /** New device token issued on reconnect (token rotation). Client must persist this. */
+  newDeviceToken?: string;
   /** Messages sent while the app was offline */
   missedMessages: BaseMessage[];
 }

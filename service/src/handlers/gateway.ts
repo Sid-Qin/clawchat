@@ -8,8 +8,11 @@ import {
   removeGateway,
   getAppSocketsForGateway,
   getAppSocket,
+  getConnectedDeviceIds,
 } from "../connections.js";
 import { generatePairingCode, send } from "../util.js";
+import { log } from "../log.js";
+import { checkRateLimit } from "../rate-limit.js";
 
 // ---------------------------------------------------------------------------
 // Gateway message router
@@ -28,6 +31,17 @@ export function handleGatewayMessage(
     return;
   }
 
+  // Rate limit: 200 messages per minute per gateway
+  const gwData = ws.data as GatewayWsData;
+  if (gwData.gatewayId) {
+    const rl = checkRateLimit(`gw:${gwData.gatewayId}`, 200, 60_000);
+    if (!rl.allowed) {
+      send(ws, { type: "error", id: crypto.randomUUID(), ts: Date.now(), code: "rate_limited", message: "Too many messages" });
+      log("warn", "rate_limit.gateway", { gatewayId: gwData.gatewayId });
+      return;
+    }
+  }
+
   switch (msg.type) {
     case "gateway.register":
       return onRegister(ws, msg as unknown as GatewayRegister, db);
@@ -39,7 +53,7 @@ export function handleGatewayMessage(
       return onDevicesRevoke(ws, msg as unknown as DevicesRevoke, db);
     default:
       // Forward gateway -> apps relay messages
-      return forwardToApps(ws, msg, raw);
+      return forwardToApps(ws, msg, raw, db);
   }
 }
 
@@ -66,9 +80,20 @@ function onRegister(
     return;
   }
 
-  // Phase 0: trust-on-first-use. Accept any token and upsert.
-  // TODO(phase 1): verify token matches or require re-auth.
-  db.registerGateway(gatewayId, token);
+  // Register gateway — verifies token hash on subsequent registrations
+  const gwRow = db.registerGateway(gatewayId, token);
+  if (!gwRow) {
+    send(ws, {
+      type: "error",
+      id: crypto.randomUUID(),
+      ts: Date.now(),
+      code: "unauthorized",
+      message: "Invalid gateway token",
+    });
+    log("warn", "gateway.register.unauthorized", { gatewayId });
+    ws.close(4003, "unauthorized");
+    return;
+  }
 
   // Attach identity to the socket
   const data = ws.data as GatewayWsData;
@@ -89,7 +114,7 @@ function onRegister(
     pairedDevices: devices.length,
   });
 
-  console.log(`[gw] registered: ${gatewayId} (v${version}, ${agents.length} agents, ${devices.length} devices)`);
+  log("info", "gateway.register", { gatewayId, version, agents: agents.length, devices: devices.length });
 
   // Notify connected apps that gateway is online
   const presenceMsg = JSON.stringify({
@@ -97,6 +122,8 @@ function onRegister(
     id: crypto.randomUUID(),
     ts: Date.now(),
     status: "online",
+    online: true,
+    gatewayId,
   });
   for (const appWs of getAppSocketsForGateway(gatewayId)) {
     appWs.send(presenceMsg);
@@ -124,6 +151,14 @@ function onPairGenerate(
     return;
   }
 
+  // Rate limit: 5 pairing codes per minute per gateway
+  const pairRl = checkRateLimit(`pair:${data.gatewayId}`, 5, 60_000);
+  if (!pairRl.allowed) {
+    send(ws, { type: "error", id: crypto.randomUUID(), ts: Date.now(), code: "rate_limited", message: "Too many pairing code requests" });
+    log("warn", "rate_limit.pair", { gatewayId: data.gatewayId });
+    return;
+  }
+
   const code = generatePairingCode();
   const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
 
@@ -140,7 +175,7 @@ function onPairGenerate(
     expiresAt,
   });
 
-  console.log(`[gw] pairing code generated for ${data.gatewayId}: ${displayCode}`);
+  log("info", "pair.generate", { gatewayId: data.gatewayId, code: displayCode });
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +262,7 @@ function onDevicesRevoke(
     appWs.close(4003, "device_revoked");
   }
 
-  console.log(`[gw] device revoked: ${msg.deviceId} by gateway ${data.gatewayId}`);
+  log("info", "device.revoke", { deviceId: msg.deviceId, gatewayId: data.gatewayId });
 }
 
 // ---------------------------------------------------------------------------
@@ -243,19 +278,41 @@ const FORWARD_TYPES = new Set([
   "typing",
 ]);
 
+/** Message types that should be queued for offline devices (not typing/presence). */
+const OFFLINE_QUEUE_TYPES = new Set([
+  "message.outbound",
+  "message.stream",
+  "message.reasoning",
+  "tool.event",
+]);
+
 function forwardToApps(
   ws: ServerWebSocket<WsData>,
   msg: { type: string },
   raw: string,
+  db: DbStore,
 ): void {
   if (!FORWARD_TYPES.has(msg.type)) return;
 
   const data = ws.data as GatewayWsData;
   if (!data.gatewayId) return;
 
+  // Get connected app sockets
   const apps = getAppSocketsForGateway(data.gatewayId);
+  const connectedDeviceIds = getConnectedDeviceIds(data.gatewayId);
+
   for (const appWs of apps) {
     appWs.send(raw);
+  }
+
+  // Queue for offline devices (if message type is queueable)
+  if (OFFLINE_QUEUE_TYPES.has(msg.type)) {
+    const allDevices = db.listDevicesByGateway(data.gatewayId);
+    for (const device of allDevices) {
+      if (!connectedDeviceIds.has(device.deviceId)) {
+        db.queueOfflineMessage(device.deviceId, raw);
+      }
+    }
   }
 }
 
@@ -275,6 +332,8 @@ export function handleGatewayClose(ws: ServerWebSocket<WsData>): void {
     id: crypto.randomUUID(),
     ts: Date.now(),
     status: "offline",
+    online: false,
+    gatewayId: data.gatewayId,
   });
   for (const appWs of getAppSocketsForGateway(data.gatewayId)) {
     appWs.send(presenceMsg);

@@ -1,4 +1,5 @@
 import type { ServerWebSocket } from "bun";
+import { log } from "./log.js";
 
 // ---------------------------------------------------------------------------
 // WebSocket data attached during upgrade
@@ -9,12 +10,16 @@ export interface GatewayWsData {
   gatewayId: string;
   /** Available agent identifiers reported during registration */
   agents: string[];
+  /** IP address for connection tracking */
+  ip: string;
 }
 
 export interface AppWsData {
   kind: "app";
   deviceId: string;
   gatewayId: string;
+  /** IP address for connection tracking */
+  ip: string;
 }
 
 export type WsData = GatewayWsData | AppWsData;
@@ -32,6 +37,13 @@ const appSockets = new Map<string, ServerWebSocket<WsData>>();
 /** Gateway → set of paired device IDs that are currently connected */
 const gatewayDevices = new Map<string, Set<string>>();
 
+/** IP → count of active WebSocket connections */
+const ipConnections = new Map<string, number>();
+
+// Connection limits
+const MAX_CONNECTIONS_PER_IP = 20;
+const MAX_APP_CONNECTIONS_PER_GATEWAY = 5;
+
 // ---------------------------------------------------------------------------
 // Gateway helpers
 // ---------------------------------------------------------------------------
@@ -41,12 +53,12 @@ export function addGateway(gatewayId: string, ws: ServerWebSocket<WsData>): void
   if (!gatewayDevices.has(gatewayId)) {
     gatewayDevices.set(gatewayId, new Set());
   }
-  console.log(`[conn] gateway connected: ${gatewayId}`);
+  log("debug", "conn.gateway.add", { gatewayId });
 }
 
 export function removeGateway(gatewayId: string): void {
   gatewaySockets.delete(gatewayId);
-  console.log(`[conn] gateway disconnected: ${gatewayId}`);
+  log("debug", "conn.gateway.remove", { gatewayId });
 }
 
 export function getGatewaySocket(gatewayId: string): ServerWebSocket<WsData> | undefined {
@@ -69,13 +81,13 @@ export function addApp(deviceId: string, gatewayId: string, ws: ServerWebSocket<
     gatewayDevices.set(gatewayId, devices);
   }
   devices.add(deviceId);
-  console.log(`[conn] app connected: device=${deviceId} gateway=${gatewayId}`);
+  log("debug", "conn.app.add", { deviceId, gatewayId });
 }
 
 export function removeApp(deviceId: string, gatewayId: string): void {
   appSockets.delete(deviceId);
   gatewayDevices.get(gatewayId)?.delete(deviceId);
-  console.log(`[conn] app disconnected: device=${deviceId} gateway=${gatewayId}`);
+  log("debug", "conn.app.remove", { deviceId, gatewayId });
 }
 
 export function getAppSocket(deviceId: string): ServerWebSocket<WsData> | undefined {
@@ -101,6 +113,36 @@ export function getAppSocketsForGateway(gatewayId: string): ServerWebSocket<WsDa
  */
 export function getConnectedDeviceIds(gatewayId: string): Set<string> {
   return gatewayDevices.get(gatewayId) ?? new Set();
+}
+
+// ---------------------------------------------------------------------------
+// IP connection tracking
+// ---------------------------------------------------------------------------
+
+/** Track a new connection from an IP. Returns false if limit exceeded. */
+export function trackIpConnection(ip: string): boolean {
+  const current = ipConnections.get(ip) ?? 0;
+  if (current >= MAX_CONNECTIONS_PER_IP) return false;
+  ipConnections.set(ip, current + 1);
+  return true;
+}
+
+/** Release a connection from an IP. */
+export function releaseIpConnection(ip: string): void {
+  const current = ipConnections.get(ip);
+  if (current === undefined) return;
+  if (current <= 1) {
+    ipConnections.delete(ip);
+  } else {
+    ipConnections.set(ip, current - 1);
+  }
+}
+
+/** Check if a gateway has room for more app connections. */
+export function canAddAppToGateway(gatewayId: string): boolean {
+  const devices = gatewayDevices.get(gatewayId);
+  if (!devices) return true;
+  return devices.size < MAX_APP_CONNECTIONS_PER_GATEWAY;
 }
 
 // ---------------------------------------------------------------------------

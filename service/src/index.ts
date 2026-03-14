@@ -4,6 +4,10 @@ import { createHttpRoutes } from "./handlers/http.js";
 import { handleGatewayMessage, handleGatewayClose } from "./handlers/gateway.js";
 import { handleAppMessage, handleAppClose } from "./handlers/app.js";
 import type { WsData } from "./connections.js";
+import { trackIpConnection, releaseIpConnection } from "./connections.js";
+import { trackSocket, untrackSocket, handlePong, startKeepaliveLoop } from "./keepalive.js";
+import { log } from "./log.js";
+import { checkRateLimit, cleanupRateLimits } from "./rate-limit.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -18,13 +22,14 @@ const DB_PATH = process.env.DB_PATH || "clawchat.db";
 
 const db = createDb(DB_PATH);
 
-// Clean expired pairing codes periodically (every 10 minutes)
+// Periodic cleanup (every 60 seconds)
 setInterval(() => {
-  const cleaned = db.cleanExpiredCodes();
-  if (cleaned > 0) {
-    console.log(`[db] cleaned ${cleaned} expired pairing codes`);
+  const cleanedCodes = db.cleanExpiredCodes();
+  const cleanedRateLimits = cleanupRateLimits(60_000);
+  if (cleanedCodes > 0 || cleanedRateLimits > 0) {
+    log("debug", "db.cleanup", { cleanedCodes, cleanedRateLimits });
   }
-}, 10 * 60 * 1000);
+}, 60 * 1000);
 
 // ---------------------------------------------------------------------------
 // HTTP (Hono)
@@ -44,22 +49,38 @@ const server = Bun.serve<WsData>({
 
   fetch(req, server) {
     const url = new URL(req.url);
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+
+    // WebSocket connection rate limit: 10/min per IP + max 20 concurrent per IP
+    if (url.pathname === "/ws/gateway" || url.pathname === "/ws/app") {
+      const rl = checkRateLimit(`wsconn:${ip}`, 10, 60_000);
+      if (!rl.allowed) {
+        log("warn", "rate_limit.ws_connect", { ip });
+        return new Response("Too Many Requests", { status: 429 });
+      }
+      if (!trackIpConnection(ip)) {
+        log("warn", "connection_limit.ip", { ip });
+        return new Response("Too Many Requests", { status: 429 });
+      }
+    }
 
     // WebSocket upgrade for gateway connections
     if (url.pathname === "/ws/gateway") {
       const upgraded = server.upgrade(req, {
-        data: { kind: "gateway" as const, gatewayId: "", agents: [] },
+        data: { kind: "gateway" as const, gatewayId: "", agents: [], ip },
       });
       if (upgraded) return undefined;
+      releaseIpConnection(ip);
       return new Response("WebSocket upgrade failed", { status: 400 });
     }
 
     // WebSocket upgrade for app connections
     if (url.pathname === "/ws/app") {
       const upgraded = server.upgrade(req, {
-        data: { kind: "app" as const, deviceId: "", gatewayId: "" },
+        data: { kind: "app" as const, deviceId: "", gatewayId: "", ip },
       });
       if (upgraded) return undefined;
+      releaseIpConnection(ip);
       return new Response("WebSocket upgrade failed", { status: 400 });
     }
 
@@ -70,7 +91,8 @@ const server = Bun.serve<WsData>({
   websocket: {
     open(ws) {
       const { kind } = ws.data;
-      console.log(`[ws] ${kind} socket opened`);
+      log("debug", "ws.open", { kind });
+      trackSocket(ws);
     },
 
     message(ws, message) {
@@ -86,7 +108,9 @@ const server = Bun.serve<WsData>({
 
     close(ws, code, reason) {
       const { kind } = ws.data;
-      console.log(`[ws] ${kind} socket closed (code=${code} reason=${reason})`);
+      log("debug", "ws.close", { kind, code, reason });
+      untrackSocket(ws);
+      releaseIpConnection(ws.data.ip);
 
       if (kind === "gateway") {
         handleGatewayClose(ws);
@@ -95,7 +119,14 @@ const server = Bun.serve<WsData>({
       }
     },
 
+    pong(ws) {
+      handlePong(ws);
+    },
+
   },
 });
 
-console.log(`[clawchat] relay service listening on http://localhost:${server.port}`);
+// Start WebSocket keepalive ping loop (30s interval, 10s pong timeout)
+startKeepaliveLoop();
+
+log("info", "server.start", { port: server.port });

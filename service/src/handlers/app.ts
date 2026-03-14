@@ -7,8 +7,11 @@ import {
   removeApp,
   getGatewaySocket,
   isGatewayOnline,
+  canAddAppToGateway,
 } from "../connections.js";
 import { send } from "../util.js";
+import { log } from "../log.js";
+import { checkRateLimit } from "../rate-limit.js";
 
 // ---------------------------------------------------------------------------
 // App message router
@@ -31,6 +34,17 @@ export function handleAppMessage(
       message: "Failed to parse message",
     });
     return;
+  }
+
+  // Rate limit: 60 messages per minute per device
+  const data = ws.data as AppWsData;
+  if (data.deviceId) {
+    const rl = checkRateLimit(`app:${data.deviceId}`, 60, 60_000);
+    if (!rl.allowed) {
+      send(ws, { type: "error", id: crypto.randomUUID(), ts: Date.now(), code: "rate_limited", message: "Too many messages" });
+      log("warn", "rate_limit.app", { deviceId: data.deviceId });
+      return;
+    }
   }
 
   switch (msg.type) {
@@ -59,8 +73,6 @@ function onPair(
 
   const codeRow = db.redeemPairingCode(code);
   if (!codeRow) {
-    // Distinguish expired vs invalid
-    // redeemPairingCode returns null for invalid, expired, or already-redeemed
     send(ws, {
       type: "app.pair.error",
       id: crypto.randomUUID(),
@@ -68,6 +80,20 @@ function onPair(
       error: "invalid_code",
       message: "Invalid or expired pairing code",
     });
+    return;
+  }
+
+  // Check device limit (max 10 paired devices per gateway)
+  const existingDevices = db.listDevicesByGateway(codeRow.gatewayId);
+  if (existingDevices.length >= 10) {
+    send(ws, {
+      type: "app.pair.error",
+      id: crypto.randomUUID(),
+      ts: Date.now(),
+      error: "device_limit",
+      message: "Maximum paired devices reached",
+    });
+    log("warn", "connection_limit.devices", { gatewayId: codeRow.gatewayId, count: existingDevices.length });
     return;
   }
 
@@ -103,7 +129,7 @@ function onPair(
     agents,
   });
 
-  console.log(`[app] paired: device=${deviceId} gateway=${codeRow.gatewayId} name=${msg.deviceName}`);
+  log("info", "app.paired", { deviceId, gatewayId: codeRow.gatewayId, platform: msg.platform, deviceName: msg.deviceName });
 }
 
 // ---------------------------------------------------------------------------
@@ -128,10 +154,28 @@ function onConnect(
     return;
   }
 
+  // Check app connection limit per gateway
+  if (!canAddAppToGateway(device.gatewayId)) {
+    send(ws, {
+      type: "error",
+      id: crypto.randomUUID(),
+      ts: Date.now(),
+      code: "connection_limit",
+      message: "Too many connected devices for this gateway",
+    });
+    log("warn", "connection_limit.app", { gatewayId: device.gatewayId });
+    ws.close(4003, "connection_limit");
+    return;
+  }
+
   // Attach identity to the socket
   const data = ws.data as AppWsData;
   data.deviceId = device.deviceId;
   data.gatewayId = device.gatewayId;
+
+  // Rotate device token
+  const newDeviceToken = crypto.randomUUID();
+  db.updateDeviceToken(device.deviceId, newDeviceToken);
 
   // Track connection
   addApp(device.deviceId, device.gatewayId, ws);
@@ -149,10 +193,21 @@ function onConnect(
     gatewayId: device.gatewayId,
     gatewayOnline,
     agents,
-    missedMessages: [], // Phase 0: no offline queue
+    newDeviceToken,
+    missedMessages: [],
   });
 
-  console.log(`[app] connected: device=${device.deviceId} gateway=${device.gatewayId} (gateway ${gatewayOnline ? "online" : "offline"})`);
+  // Deliver offline messages
+  const offlineMsgs = db.getOfflineMessages(device.deviceId);
+  if (offlineMsgs.length > 0) {
+    for (const msg of offlineMsgs) {
+      ws.send(msg.payload);
+    }
+    db.markOfflineDelivered(offlineMsgs.map((m) => m.id));
+    log("info", "offline.delivered", { deviceId: device.deviceId, count: offlineMsgs.length });
+  }
+
+  log("info", "app.connected", { deviceId: device.deviceId, gatewayId: device.gatewayId, gatewayOnline, tokenRotated: true });
 }
 
 // ---------------------------------------------------------------------------
