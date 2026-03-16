@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CC4547A32F6656CE00D9B336 /* ClawChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC4547A22F6656CE00D9B336 /* ClawChatKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		8D4547E72F6656CE00D9B336 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CC4547A32F6656CE00D9B336 /* ClawChatKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = ClawOS;
 			packageProductDependencies = (
+				CC4547A22F6656CE00D9B336 /* ClawChatKit */,
 			);
 			productName = ClawOS;
 			productReference = 8D4547D92F6656CE00D9B336 /* ClawOS.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = 8D4547D02F6656CD00D9B336;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				CC4547A12F6656CE00D9B336 /* XCLocalSwiftPackageReference "ClawChatKit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8D4547DA2F6656CE00D9B336 /* Products */;
 			projectDirPath = "";
@@ -391,6 +400,7 @@
 		8D4547FB2F6656CE00D9B336 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AltIcon-EVA00 AltIcon-EVA01 AltIcon-EVA02";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -425,6 +435,7 @@
 		8D4547FC2F6656CE00D9B336 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AltIcon-EVA00 AltIcon-EVA01 AltIcon-EVA02";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -576,6 +587,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		CC4547A12F6656CE00D9B336 /* XCLocalSwiftPackageReference "ClawChatKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ClawChatKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CC4547A22F6656CE00D9B336 /* ClawChatKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ClawChatKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 8D4547D12F6656CD00D9B336 /* Project object */;
 }
