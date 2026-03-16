@@ -31,6 +31,7 @@ final class AppState {
             UserDefaults.standard.set(selectedVisualThemeID.rawValue, forKey: Self.themeKey)
         }
     }
+    var colorScheme: ColorScheme = .light
     var showPairing = false
 
     let clawChatManager = ClawChatManager()
@@ -51,7 +52,7 @@ final class AppState {
     }
 
     var currentVisualTheme: AppVisualTheme {
-        AppVisualTheme.theme(for: selectedVisualThemeID)
+        AppVisualTheme.theme(for: selectedVisualThemeID, colorScheme: colorScheme)
     }
 
     var currentGateway: Gateway? {
@@ -67,11 +68,18 @@ final class AppState {
     }
 
     func selectGateway(_ id: String) {
+        guard id != selectedGatewayId else { return }
+        
         selectedGatewayId = id
         let visible = currentGatewayAgents
         if !visible.contains(where: { $0.id == selectedAgentId }),
            let first = visible.first {
             selectedAgentId = first.id
+        }
+        
+        // Trigger real connection switch
+        Task {
+            await clawChatManager.switchGateway(to: id)
         }
     }
 

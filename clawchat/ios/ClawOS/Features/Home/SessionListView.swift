@@ -8,10 +8,10 @@ struct SessionListView: View {
     var onMenuTap: () -> Void = {}
 
     private var filteredSessions: [Session] {
-        let visibleAgentIds = Set(appState.currentGatewayAgents.map(\.id))
-        let gatewaySessions = appState.sessions.filter { visibleAgentIds.contains($0.agentId) }
+        let selectedAgentId = appState.selectedAgentId
+        let agentSessions = appState.sessions.filter { $0.agentId == selectedAgentId }
 
-        let sortedSessions = gatewaySessions.sorted { s1, s2 in
+        let sortedSessions = agentSessions.sorted { s1, s2 in
             if s1.isPinned != s2.isPinned {
                 return s1.isPinned
             }
@@ -42,14 +42,7 @@ struct SessionListView: View {
         .onTapGesture {
             isSearchFocused = false
         }
-        .background {
-            LinearGradient(
-                colors: [appState.currentVisualTheme.pageGradientTop, appState.currentVisualTheme.pageGradientBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        }
+        .background(Color.clear)
     }
 
     // MARK: - Header
@@ -151,20 +144,55 @@ struct SessionListView: View {
 
     private var emptyState: some View {
         let isSearching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return VStack(spacing: 16) {
-            Image(systemName: isSearching ? "magnifyingglass" : "bubble.left.and.bubble.right")
-                .resizable()
-                .scaledToFit()
-                .frame(width: isSearching ? 36 : 64, height: isSearching ? 36 : 64)
-                .foregroundStyle(Color(.systemGray4))
+        let isUnpaired = appState.clawChatManager.linkState == .unpaired
+        let isDisconnected = appState.clawChatManager.linkState == .disconnected || appState.clawChatManager.linkState == .connecting
 
-            VStack(spacing: 4) {
-                Text(isSearching ? "无搜索结果" : "暂无会话")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Text(isSearching ? "试试其他关键词" : "开始一段新的对话")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+        return VStack(spacing: 16) {
+            if isUnpaired {
+                Image(systemName: "link.badge.plus")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 48, height: 48)
+                    .foregroundStyle(Color(.systemGray4))
+                
+                VStack(spacing: 4) {
+                    Text("未连接服务器")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Text("请先配对或连接服务器")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            } else if isSearching {
+                Image(systemName: "magnifyingglass")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 36, height: 36)
+                    .foregroundStyle(Color(.systemGray4))
+                
+                VStack(spacing: 4) {
+                    Text("无搜索结果")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Text("试试其他关键词")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            } else {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 64, height: 64)
+                    .foregroundStyle(Color(.systemGray4))
+
+                VStack(spacing: 4) {
+                    Text("暂无会话")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Text("开始一段新的对话")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
         .frame(maxWidth: .infinity)
