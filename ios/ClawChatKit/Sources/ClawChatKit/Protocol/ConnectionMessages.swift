@@ -35,6 +35,7 @@ public struct AppPaired: BaseMessage, Sendable {
     public let ts: Int64
     public let deviceToken: String
     public let gatewayId: String
+    public let agents: [String]?
 }
 
 // MARK: - App Pair Error
@@ -79,5 +80,6 @@ public struct AppConnected: BaseMessage, Sendable {
     public let ts: Int64
     public let gatewayId: String
     public let gatewayOnline: Bool?
+    public let agents: [String]?
     public let newDeviceToken: String?
 }

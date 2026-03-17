@@ -23,32 +23,20 @@ struct SessionSwipeMetrics: Equatable {
 }
 
 enum SessionSwipeBehavior {
-    static let revealWidth: CGFloat = 160
-    static let dominantThreshold: CGFloat = 260
-    static let confirmThreshold: CGFloat = 340
-    static let armedLockWidth: CGFloat = confirmThreshold
+    static let revealWidth: CGFloat = 150
+    static let dominantThreshold: CGFloat = 200
+    static let confirmThreshold: CGFloat = 280
+    static let armedLockWidth: CGFloat = 150 // Snap back to normal button width when showing alert
 
-    static let pinBaseWidth: CGFloat = 78
-    static let deleteBaseWidth: CGFloat = 82
-    static let overshootDamping: CGFloat = 0.12
+    static let pinBaseWidth: CGFloat = 75
+    static let deleteBaseWidth: CGFloat = 75
 
-    static let openVelocityThreshold: CGFloat = -520
-    static let armedVelocityThreshold: CGFloat = -1400
-    static let closeVelocityThreshold: CGFloat = 320
+    static let openVelocityThreshold: CGFloat = -400
+    static let armedVelocityThreshold: CGFloat = -1200
+    static let closeVelocityThreshold: CGFloat = 300
 
     static func interactiveOffset(initialOffset: CGFloat, translation: CGFloat) -> CGFloat {
-        let proposedOffset = initialOffset + translation
-        if proposedOffset >= 0 {
-            return 0
-        }
-
-        let travel = -proposedOffset
-        guard travel > confirmThreshold else {
-            return proposedOffset
-        }
-
-        let extraTravel = travel - confirmThreshold
-        return -(confirmThreshold + extraTravel * overshootDamping)
+        return min(0, initialOffset + translation)
     }
 
     static func stage(for offset: CGFloat) -> SessionSwipeStage {
@@ -68,7 +56,8 @@ enum SessionSwipeBehavior {
 
     static func metrics(for offset: CGFloat) -> SessionSwipeMetrics {
         let travel = max(0, -offset)
-        let railWidth = min(max(travel, 0), armedLockWidth)
+        let railWidth = travel
+        
         let takeoverProgress = clampedProgress(
             value: railWidth,
             lower: revealWidth,
@@ -80,16 +69,15 @@ enum SessionSwipeBehavior {
             upper: confirmThreshold
         )
 
-        let pinWidth = max(0, pinBaseWidth * (1 - takeoverProgress) * (1 - armedProgress * 0.9))
-        let targetDeleteWidth = max(deleteBaseWidth, railWidth - pinWidth)
-        let deleteWidth = min(armedLockWidth, max(deleteBaseWidth, targetDeleteWidth))
+        let pinWidth = max(0, pinBaseWidth * (1 - takeoverProgress))
+        let deleteWidth = max(deleteBaseWidth, railWidth - pinWidth)
 
         return SessionSwipeMetrics(
             stage: stage(for: offset),
             railWidth: railWidth,
             pinWidth: pinWidth,
             deleteWidth: deleteWidth,
-            deleteIconScale: 1 + takeoverProgress * 0.08 + armedProgress * 0.18,
+            deleteIconScale: 1 + takeoverProgress * 0.1 + armedProgress * 0.15,
             deleteEmphasis: takeoverProgress * 0.7 + armedProgress * 0.3
         )
     }
@@ -102,7 +90,7 @@ enum SessionSwipeBehavior {
         let currentTravel = max(0, -currentOffset)
         let predictedTravel = max(0, -predictedEndOffset)
 
-        if currentTravel >= confirmThreshold * 0.88 || velocity <= armedVelocityThreshold {
+        if currentTravel >= confirmThreshold * 0.9 || velocity <= armedVelocityThreshold {
             return .armedForDelete
         }
 
@@ -111,7 +99,7 @@ enum SessionSwipeBehavior {
         }
 
         let decisionTravel = max(currentTravel, predictedTravel)
-        if decisionTravel >= revealWidth * 0.72 || velocity <= openVelocityThreshold {
+        if decisionTravel >= revealWidth * 0.6 || velocity <= openVelocityThreshold {
             return .revealed
         }
 

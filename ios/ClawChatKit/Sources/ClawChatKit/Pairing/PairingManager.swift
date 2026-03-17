@@ -4,12 +4,14 @@ import Foundation
 public struct PairingResult: Sendable {
     public let deviceToken: String
     public let gatewayId: String
+    public let agents: [String]?
 }
 
 /// Result of a successful reconnection.
 public struct ReconnectResult: Sendable {
     public let gatewayId: String
     public let gatewayOnline: Bool
+    public let agents: [String]?
     public let newDeviceToken: String?
 }
 
@@ -36,7 +38,11 @@ public actor PairingManager {
                 for await msg in messages {
                     switch msg {
                     case .appPaired(let paired):
-                        return PairingResult(deviceToken: paired.deviceToken, gatewayId: paired.gatewayId)
+                        return PairingResult(
+                            deviceToken: paired.deviceToken,
+                            gatewayId: paired.gatewayId,
+                            agents: paired.agents
+                        )
                     case .appPairError(let error):
                         throw Self.pairingError(from: error.error)
                     case .error(let error):
@@ -78,6 +84,7 @@ public actor PairingManager {
                         return ReconnectResult(
                             gatewayId: connected.gatewayId,
                             gatewayOnline: connected.gatewayOnline ?? false,
+                            agents: connected.agents,
                             newDeviceToken: connected.newDeviceToken
                         )
                     case .error(let error):

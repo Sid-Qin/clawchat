@@ -12,6 +12,8 @@ public final class ChatState: @unchecked Sendable {
     public private(set) var isTyping: Bool = false
     public private(set) var gatewayOnline: Bool = false
 
+    public var onAppConnected: ((AppConnected) -> Void)?
+
     // MARK: - Internal state
 
     private let client: WebSocketClient
@@ -43,14 +45,48 @@ public final class ChatState: @unchecked Sendable {
         stateObserverTask = nil
     }
 
+    public func setGatewayOnline(_ isOnline: Bool) {
+        gatewayOnline = isOnline
+    }
+
+    static func mergeStreamingText(current: String, incoming: String) -> String {
+        guard !incoming.isEmpty else { return current }
+        guard !current.isEmpty else { return incoming }
+
+        if incoming == current { return current }
+        if incoming.hasPrefix(current) { return incoming }
+        if current.hasPrefix(incoming) { return current }
+        if current.hasSuffix(incoming) { return current }
+
+        let maxOverlap = min(current.count, incoming.count)
+        for overlap in stride(from: maxOverlap, to: 0, by: -1) {
+            let currentSuffix = String(current.suffix(overlap))
+            let incomingPrefix = String(incoming.prefix(overlap))
+            if currentSuffix == incomingPrefix {
+                return current + incoming.dropFirst(overlap)
+            }
+        }
+
+        return current + incoming
+    }
+
     // MARK: - Send
 
     /// Send a user message. Appends to messages and sends to relay.
-    public func sendMessage(text: String, agentId: String = "default") {
+    public func sendMessage(
+        text: String,
+        agentId: String = "default",
+        attachments: [MessageAttachment] = []
+    ) {
         let userMessage = ChatMessage(role: .user, text: text)
         messages.append(userMessage)
 
-        let inbound = MessageInbound(text: text, agentId: agentId)
+        let inbound = MessageInbound(
+            text: text.isEmpty ? nil : text,
+            agentId: agentId,
+            attachments: attachments.isEmpty ? nil : attachments
+        )
+        print("[ChatState] sendMessage: agentId=\(agentId) text=\(text.prefix(40))")
         Task {
             await client.send(inbound)
         }
@@ -99,6 +135,8 @@ public final class ChatState: @unchecked Sendable {
             handlePresence(presence)
         case .error(let error):
             handleError(error)
+        case .appConnected(let connected):
+            onAppConnected?(connected)
         default:
             break
         }
@@ -114,8 +152,10 @@ public final class ChatState: @unchecked Sendable {
         switch stream.phase {
         case .streaming:
             if let idx = messages.firstIndex(where: { $0.id == stream.id }) {
-                // Append delta to existing message
-                messages[idx].text += stream.delta
+                messages[idx].text = Self.mergeStreamingText(
+                    current: messages[idx].text,
+                    incoming: stream.delta
+                )
             } else {
                 // Create new assistant message
                 let msg = ChatMessage(
@@ -165,7 +205,10 @@ public final class ChatState: @unchecked Sendable {
             if messages[idx].reasoning == nil {
                 messages[idx].reasoning = reasoning.text
             } else {
-                messages[idx].reasoning! += reasoning.text
+                messages[idx].reasoning = Self.mergeStreamingText(
+                    current: messages[idx].reasoning ?? "",
+                    incoming: reasoning.text
+                )
             }
         case .done:
             break

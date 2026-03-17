@@ -23,6 +23,7 @@ public actor WebSocketClient {
 
     private var messageContinuation: AsyncStream<ClawChatMessage>.Continuation?
     private var _connectionState: ConnectionState = .disconnected
+    private var hasConnectedOnce = false
 
     // MARK: - Public API
 
@@ -37,9 +38,17 @@ public actor WebSocketClient {
     /// Callback for connection state changes (called on actor).
     public var onConnectionStateChange: ((ConnectionState) -> Void)?
 
+    /// Called when the WebSocket reconnects after a previous successful connection.
+    public var onReconnect: (@Sendable () -> Void)?
+
     /// Set the connection state change callback.
     public func onStateChange(_ handler: @escaping (ConnectionState) -> Void) {
         onConnectionStateChange = handler
+    }
+
+    /// Set the reconnect callback.
+    public func setReconnectHandler(_ handler: @escaping @Sendable () -> Void) {
+        onReconnect = handler
     }
 
     // MARK: - Init
@@ -79,13 +88,24 @@ public actor WebSocketClient {
 
     /// Send a Codable message as JSON text frame.
     public func send<T: Encodable>(_ message: T) {
-        guard let task = webSocketTask, task.state == .running else { return }
+        guard let task = webSocketTask else {
+            print("[ClawChatKit] send() dropped: no webSocketTask")
+            return
+        }
+        guard task.state == .running else {
+            print("[ClawChatKit] send() dropped: task.state=\(task.state.rawValue) (not running)")
+            return
+        }
         do {
             let data = try JSONEncoder().encode(message)
             let string = String(data: data, encoding: .utf8) ?? ""
-            task.send(.string(string)) { _ in }
+            task.send(.string(string)) { error in
+                if let error {
+                    print("[ClawChatKit] send() error: \(error.localizedDescription)")
+                }
+            }
         } catch {
-            // Silently drop on encode failure
+            print("[ClawChatKit] send() encode error: \(error)")
         }
     }
 
@@ -97,10 +117,14 @@ public actor WebSocketClient {
         self.webSocketTask = task
         task.resume()
 
-        // URLSessionWebSocketTask doesn't have a delegate-based "onOpen" —
-        // we know it's open when the first receive succeeds or we can just
-        // set connected and start receiving.
         setConnectionState(.connected)
+
+        let isReconnect = hasConnectedOnce
+        hasConnectedOnce = true
+        if isReconnect {
+            onReconnect?()
+        }
+
         attempt = 0
         startReceiveLoop()
         startPingLoop()
@@ -130,6 +154,7 @@ public actor WebSocketClient {
         let data: Data
         switch wsMessage {
         case .string(let text):
+            print("[ClawChatKit] recv:", text.prefix(200))
             guard let d = text.data(using: .utf8) else { return }
             data = d
         case .data(let d):

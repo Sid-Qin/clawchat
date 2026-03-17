@@ -60,12 +60,27 @@ struct AgentProfileView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView(
-            "暂无 Agent",
-            systemImage: "person.crop.circle.badge.questionmark",
-            description: Text("连接 Gateway 后将自动加载 Agent 列表")
-        )
-        .padding(.top, 60)
+        GeometryReader { geo in
+            VStack(spacing: 12) {
+                Image(systemName: "person.crop.circle.badge.questionmark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 44, height: 44)
+                    .foregroundStyle(Color(.systemGray3))
+
+                VStack(spacing: 6) {
+                    Text("暂无 Agent")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color(.secondaryLabel))
+                    Text("连接 Gateway 后将自动加载 Agent 列表")
+                        .font(.caption)
+                        .foregroundStyle(Color(.tertiaryLabel))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .position(x: geo.size.width / 2, y: geo.size.height * 0.4)
+        }
+        .frame(height: UIScreen.main.bounds.height * 0.5)
     }
 
     // MARK: - Banner
@@ -87,7 +102,7 @@ struct AgentProfileView: View {
                         .resizable()
                         .scaledToFill()
                         .opacity(0.34)
-                        .overlay(Color.white.opacity(0.12))
+                        .overlay(Color(.systemBackground).opacity(0.12))
                 }
             }
             .frame(width: geo.size.width, height: height)

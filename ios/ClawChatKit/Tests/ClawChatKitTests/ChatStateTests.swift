@@ -66,6 +66,18 @@ struct ChatStateTests {
         #expect(messages[0].text == "hello")
     }
 
+    @Test("Stream accumulation: cumulative snapshots should replace instead of duplicate")
+    func streamMergeCumulativeSnapshots() {
+        let merged = ChatState.mergeStreamingText(current: "hello", incoming: "hello world")
+        #expect(merged == "hello world")
+    }
+
+    @Test("Stream accumulation: incremental chunks should still append")
+    func streamMergeIncrementalChunks() {
+        let merged = ChatState.mergeStreamingText(current: "hello", incoming: " world")
+        #expect(merged == "hello world")
+    }
+
     @Test("Stream accumulation: finalize on done")
     func streamFinalizeOnDone() {
         var messages: [ChatMessage] = [

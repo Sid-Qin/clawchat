@@ -39,7 +39,7 @@ struct ProtocolTests {
     @Test("Decode app.paired")
     func decodeAppPaired() throws {
         let json = """
-        {"type":"app.paired","id":"p1","ts":1000,"deviceToken":"tok-123","gatewayId":"gw-1"}
+        {"type":"app.paired","id":"p1","ts":1000,"deviceToken":"tok-123","gatewayId":"gw-1","agents":["hulu::呼噜::claude-opus-4-6"]}
         """.data(using: .utf8)!
 
         let msg = try ClawChatMessage.decode(from: json)
@@ -49,6 +49,7 @@ struct ProtocolTests {
         }
         #expect(paired.deviceToken == "tok-123")
         #expect(paired.gatewayId == "gw-1")
+        #expect(paired.agents == ["hulu::呼噜::claude-opus-4-6"])
     }
 
     @Test("Decode app.pair.error")
@@ -148,6 +149,29 @@ struct ProtocolTests {
         #expect(decoded.agentId == original.agentId)
     }
 
+    @Test("MessageInbound round-trip with attachments")
+    func roundTripWithAttachments() throws {
+        let original = MessageInbound(
+            text: nil,
+            agentId: "default",
+            attachments: [
+                MessageAttachment(
+                    type: .image,
+                    mimeType: "image/png",
+                    filename: "eva.png",
+                    size: 128,
+                    data: "aGVsbG8="
+                )
+            ]
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(MessageInbound.self, from: data)
+        #expect(decoded.text == nil)
+        #expect(decoded.attachments?.count == 1)
+        #expect(decoded.attachments?.first?.filename == "eva.png")
+        #expect(decoded.attachments?.first?.mimeType == "image/png")
+    }
+
     @Test("Decode message.reasoning")
     func decodeReasoning() throws {
         let json = """
@@ -166,7 +190,7 @@ struct ProtocolTests {
     @Test("Decode app.connected with gatewayOnline")
     func decodeAppConnected() throws {
         let json = """
-        {"type":"app.connected","id":"c1","ts":1000,"gatewayId":"gw-1","gatewayOnline":true}
+        {"type":"app.connected","id":"c1","ts":1000,"gatewayId":"gw-1","gatewayOnline":true,"agents":["hulu::呼噜::claude-opus-4-6"]}
         """.data(using: .utf8)!
 
         let msg = try ClawChatMessage.decode(from: json)
@@ -176,6 +200,7 @@ struct ProtocolTests {
         }
         #expect(c.gatewayId == "gw-1")
         #expect(c.gatewayOnline == true)
+        #expect(c.agents == ["hulu::呼噜::claude-opus-4-6"])
     }
 
     @Test("Pong message decodes")

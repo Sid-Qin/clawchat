@@ -50,11 +50,18 @@ public struct StatusRequest: BaseMessage, Sendable {
     }
 }
 
+public struct AgentMeta: Codable, Sendable {
+    public let name: String?
+    public let model: String?
+    public let avatar: String?
+}
+
 public struct StatusResponse: BaseMessage, Sendable {
     public let type: String
     public let id: String
     public let ts: Int64
     public let gatewayOnline: Bool
     public let agents: [String]?
+    public let agentsMeta: [String: AgentMeta]?
     public let connectedDevices: Int?
 }
