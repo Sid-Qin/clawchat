@@ -5,13 +5,12 @@ struct SessionListView: View {
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     var isSidebarDragging = false
-    var onMenuTap: () -> Void = {}
 
     private var filteredSessions: [Session] {
-        let selectedAgentId = appState.selectedAgentId
-        let agentSessions = appState.sessions.filter { $0.agentId == selectedAgentId }
+        let visibleAgentIds = Set(appState.currentGatewayAgents.map(\.id))
+        let gatewaySessions = appState.sessions.filter { visibleAgentIds.contains($0.agentId) }
 
-        let sortedSessions = agentSessions.sorted { s1, s2 in
+        let sortedSessions = gatewaySessions.sorted { s1, s2 in
             if s1.isPinned != s2.isPinned {
                 return s1.isPinned
             }
@@ -35,37 +34,47 @@ struct SessionListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            searchBar
+            topBar
             sessionList
         }
+        .contentShape(Rectangle())
         .onTapGesture {
             isSearchFocused = false
         }
-        .background(Color.clear)
+        .background {
+            LinearGradient(
+                colors: [appState.currentVisualTheme.pageGradientTop, appState.currentVisualTheme.pageGradientBottom],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        }
     }
 
-    // MARK: - Header
+    // MARK: - Top Bar
 
-    private var header: some View {
-        HStack {
-            Button(action: onMenuTap) {
-                Image("clawos_svg_logo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 22, height: 22)
-                    .frame(width: 36, height: 36)
-                    .contentShape(Circle())
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 16))
+
+                TextField("搜索会话", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .focused($isSearchFocused)
+
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.scale.combined(with: .opacity))
+                }
             }
-            .glassEffect(.regular, in: .circle)
-
-            Spacer()
-
-            Text("Chat")
-                .font(.headline)
-                .fontWeight(.bold)
-
-            Spacer()
 
             Button {
                 _ = appState.startNewSession()
@@ -79,35 +88,7 @@ struct SessionListView: View {
             .glassEffect(.regular, in: .circle)
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
-        .padding(.top, 2)
-        .padding(.bottom, 10)
-    }
-
-    // MARK: - Search Bar
-
-    private var searchBar: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-            TextField("搜索会话", text: $searchText)
-                .textFieldStyle(.plain)
-                .focused($isSearchFocused)
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .transition(.scale.combined(with: .opacity))
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color(.systemGray6))
-        .cornerRadius(20)
-        .padding(.horizontal, AppTheme.Spacing.lg)
+        .padding(.top, 8)
         .padding(.bottom, 12)
         .animation(.easeInOut(duration: 0.2), value: searchText.isEmpty)
     }
@@ -135,6 +116,7 @@ struct SessionListView: View {
                 }
             }
         }
+        .scrollDismissesKeyboard(.interactively)
         .scrollDisabled(isSidebarDragging)
         .scrollDismissesKeyboard(.immediately)
         .navigationDestination(item: $selectedSession) { session in
@@ -144,59 +126,27 @@ struct SessionListView: View {
 
     private var emptyState: some View {
         let isSearching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let isUnpaired = appState.clawChatManager.linkState == .unpaired
-        let isDisconnected = appState.clawChatManager.linkState == .disconnected || appState.clawChatManager.linkState == .connecting
+        return GeometryReader { geo in
+            VStack(spacing: 12) {
+                Image(systemName: isSearching ? "magnifyingglass" : "bubble.left.and.bubble.right")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 44, height: 44)
+                    .foregroundStyle(Color(.systemGray3))
 
-        return VStack(spacing: 16) {
-            if isUnpaired {
-                Image(systemName: "link.badge.plus")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 48, height: 48)
-                    .foregroundStyle(Color(.systemGray4))
-                
-                VStack(spacing: 4) {
-                    Text("未连接服务器")
+                VStack(spacing: 6) {
+                    Text(isSearching ? "无搜索结果" : "暂无会话")
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    Text("请先配对或连接服务器")
+                        .foregroundStyle(Color(.secondaryLabel))
+                    Text(isSearching ? "试试其他关键词" : "开始一段新的对话")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            } else if isSearching {
-                Image(systemName: "magnifyingglass")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 36, height: 36)
-                    .foregroundStyle(Color(.systemGray4))
-                
-                VStack(spacing: 4) {
-                    Text("无搜索结果")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    Text("试试其他关键词")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            } else {
-                Image(systemName: "bubble.left.and.bubble.right")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 64, height: 64)
-                    .foregroundStyle(Color(.systemGray4))
-
-                VStack(spacing: 4) {
-                    Text("暂无会话")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    Text("开始一段新的对话")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color(.tertiaryLabel))
                 }
             }
+            .frame(maxWidth: .infinity)
+            .position(x: geo.size.width / 2, y: geo.size.height * 0.4)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 120)
+        .frame(height: UIScreen.main.bounds.height * 0.6)
     }
 }
 

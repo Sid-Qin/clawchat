@@ -182,6 +182,21 @@ final class ClawChatManager: @unchecked Sendable {
         state.start()
         chatState = state
 
+        state.onAppConnected = { [weak self] connected in
+            guard let self else { return }
+            if let newToken = connected.newDeviceToken {
+                let relayUrl = self.connectedRelayUrl ?? ""
+                try? self.credentialStore.save(
+                    deviceToken: newToken,
+                    relayUrl: relayUrl,
+                    gatewayId: connected.gatewayId
+                )
+                print("[ClawChatManager] token rotated and saved")
+            }
+            self.chatState?.setGatewayOnline(connected.gatewayOnline ?? false)
+            self.linkState = .connected
+        }
+
         Task {
             await client.setReconnectHandler { [weak self] in
                 Task { @MainActor in

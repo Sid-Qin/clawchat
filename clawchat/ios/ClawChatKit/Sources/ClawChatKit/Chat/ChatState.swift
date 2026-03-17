@@ -12,6 +12,8 @@ public final class ChatState: @unchecked Sendable {
     public private(set) var isTyping: Bool = false
     public private(set) var gatewayOnline: Bool = false
 
+    public var onAppConnected: ((AppConnected) -> Void)?
+
     // MARK: - Internal state
 
     private let client: WebSocketClient
@@ -133,6 +135,8 @@ public final class ChatState: @unchecked Sendable {
             handlePresence(presence)
         case .error(let error):
             handleError(error)
+        case .appConnected(let connected):
+            onAppConnected?(connected)
         default:
             break
         }

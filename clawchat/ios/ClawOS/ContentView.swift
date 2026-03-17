@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @Environment(AppState.self) private var appState
@@ -12,25 +13,33 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            Tab("主页", systemImage: "message.fill", value: 0) {
+            Tab("会话", systemImage: "message.fill", value: 0) {
                 NavigationStack {
                     HomeView()
                 }
             }
 
-            Tab("看板", systemImage: "square.grid.2x2.fill", value: 1) {
+            Tab("AHA", systemImage: "square.grid.2x2.fill", value: 1) {
                 NavigationStack {
                     DashboardView()
                 }
             }
 
-            Tab("Agent", systemImage: "person.fill", value: 2) {
+            Tab("Agents", systemImage: "person.2.fill", value: 2) {
                 NavigationStack {
                     AgentProfileView()
                 }
             }
         }
         .tint(appState.currentVisualTheme.accent)
+        .background {
+            TabBarItemVerticalTuning(
+                targetIndex: 1,
+                imageVerticalOffset: 1,
+                titleVerticalOffset: 1
+            )
+            .frame(width: 0, height: 0)
+        }
         .preferredColorScheme(isDarkMode ? .dark : nil)
         .onChange(of: effectiveColorScheme, initial: true) { _, newScheme in
             appState.colorScheme = newScheme
@@ -41,4 +50,90 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(AppState())
+}
+
+private struct TabBarItemVerticalTuning: UIViewControllerRepresentable {
+    let targetIndex: Int
+    let imageVerticalOffset: CGFloat
+    let titleVerticalOffset: CGFloat
+
+    func makeUIViewController(context: Context) -> Controller {
+        Controller()
+    }
+
+    func updateUIViewController(_ uiViewController: Controller, context: Context) {
+        uiViewController.targetIndex = targetIndex
+        uiViewController.imageVerticalOffset = imageVerticalOffset
+        uiViewController.titleVerticalOffset = titleVerticalOffset
+        uiViewController.applyAdjustments()
+    }
+
+    final class Controller: UIViewController {
+        var targetIndex = 0
+        var imageVerticalOffset: CGFloat = 0
+        var titleVerticalOffset: CGFloat = 0
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            applyAdjustments()
+        }
+
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            applyAdjustments()
+        }
+
+        func applyAdjustments() {
+            guard let tabBarController = resolvedTabBarController(),
+                  let items = tabBarController.tabBar.items,
+                  items.indices.contains(targetIndex) else {
+                return
+            }
+
+            for (index, item) in items.enumerated() {
+                if index == targetIndex {
+                    item.imageInsets = UIEdgeInsets(
+                        top: imageVerticalOffset,
+                        left: 0,
+                        bottom: -imageVerticalOffset,
+                        right: 0
+                    )
+                    item.titlePositionAdjustment = UIOffset(
+                        horizontal: 0,
+                        vertical: titleVerticalOffset
+                    )
+                } else {
+                    item.imageInsets = .zero
+                    item.titlePositionAdjustment = .zero
+                }
+            }
+        }
+
+        private func resolvedTabBarController() -> UITabBarController? {
+            if let tabBarController {
+                return tabBarController
+            }
+
+            if let parent {
+                return Self.findTabBarController(from: parent)
+            }
+
+            return Self.findTabBarController(from: view.window?.rootViewController)
+        }
+
+        private static func findTabBarController(from controller: UIViewController?) -> UITabBarController? {
+            guard let controller else { return nil }
+            if let tabBarController = controller as? UITabBarController {
+                return tabBarController
+            }
+
+            for child in controller.children {
+                if let tabBarController = findTabBarController(from: child) {
+                    return tabBarController
+                }
+            }
+
+            return findTabBarController(from: controller.presentedViewController)
+        }
+    }
 }

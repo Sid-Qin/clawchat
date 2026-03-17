@@ -43,6 +43,7 @@ struct SiriGlowBorderView: View {
     var isActive: Bool
     var dimmed: Bool = false
     var keyboardFrame: CGRect? = nil
+    var prefersKeyboardTopLayout: Bool = true
 
     private let siriColors: [Color] = [
         Color(red: 1.0, green: 0.42, blue: 0.55),
@@ -66,7 +67,10 @@ struct SiriGlowBorderView: View {
 
                     Canvas { context, size in
                         let screenBounds = CGRect(origin: .zero, size: size)
-                        let mode = SiriGlowLayout.mode(for: screenBounds, keyboardFrame: keyboardFrame)
+                        let mode = SiriGlowLayout.mode(
+                            for: screenBounds,
+                            keyboardFrame: prefersKeyboardTopLayout ? keyboardFrame : nil
+                        )
 
                         switch mode {
                         case .fullScreen:
@@ -80,8 +84,8 @@ struct SiriGlowBorderView: View {
                 .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: isActive)
-        .animation(.easeOut(duration: 0.15), value: dimmed)
+        .animation(.easeOut(duration: 0.08), value: isActive)
+        .animation(.easeOut(duration: 0.1), value: dimmed)
         .allowsHitTesting(false)
         .ignoresSafeArea()
     }
@@ -189,6 +193,7 @@ private struct SiriKeyboardGlowShape: Shape {
 struct SiriGlowWindowPresenter: UIViewRepresentable {
     var isActive: Bool
     var dimmed: Bool
+    var prefersKeyboardTopLayout: Bool = true
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -202,7 +207,8 @@ struct SiriGlowWindowPresenter: UIViewRepresentable {
             context.coordinator.updateWindow(
                 for: windowScene,
                 isActive: isActive,
-                dimmed: dimmed
+                dimmed: dimmed,
+                prefersKeyboardTopLayout: prefersKeyboardTopLayout
             )
         }
         return view
@@ -213,17 +219,17 @@ struct SiriGlowWindowPresenter: UIViewRepresentable {
             context.coordinator.updateWindow(
                 for: windowScene,
                 isActive: isActive,
-                dimmed: dimmed
+                dimmed: dimmed,
+                prefersKeyboardTopLayout: prefersKeyboardTopLayout
             )
         }
 
-        DispatchQueue.main.async {
-            context.coordinator.updateWindow(
-                for: uiView.window?.windowScene,
-                isActive: isActive,
-                dimmed: dimmed
-            )
-        }
+        context.coordinator.updateWindow(
+            for: uiView.window?.windowScene,
+            isActive: isActive,
+            dimmed: dimmed,
+            prefersKeyboardTopLayout: prefersKeyboardTopLayout
+        )
     }
 
     static func dismantleUIView(_ uiView: UIWindowReportingView, coordinator: Coordinator) {
@@ -237,8 +243,14 @@ struct SiriGlowWindowPresenter: UIViewRepresentable {
         private var keyboardFrame: CGRect?
         private var isActive = false
         private var dimmed = false
+        private var prefersKeyboardTopLayout = true
 
-        func updateWindow(for windowScene: UIWindowScene?, isActive: Bool, dimmed: Bool) {
+        func updateWindow(
+            for windowScene: UIWindowScene?,
+            isActive: Bool,
+            dimmed: Bool,
+            prefersKeyboardTopLayout: Bool
+        ) {
             guard let windowScene else {
                 teardown()
                 return
@@ -246,6 +258,7 @@ struct SiriGlowWindowPresenter: UIViewRepresentable {
 
             self.isActive = isActive
             self.dimmed = dimmed
+            self.prefersKeyboardTopLayout = prefersKeyboardTopLayout
 
             if overlayWindow?.windowScene !== windowScene {
                 teardown()
@@ -254,7 +267,8 @@ struct SiriGlowWindowPresenter: UIViewRepresentable {
                     rootView: SiriGlowBorderView(
                         isActive: isActive,
                         dimmed: dimmed,
-                        keyboardFrame: keyboardFrame
+                        keyboardFrame: keyboardFrame,
+                        prefersKeyboardTopLayout: prefersKeyboardTopLayout
                     )
                 )
                 controller.view.backgroundColor = .clear
@@ -320,7 +334,8 @@ struct SiriGlowWindowPresenter: UIViewRepresentable {
             hostingController?.rootView = SiriGlowBorderView(
                 isActive: isActive,
                 dimmed: dimmed,
-                keyboardFrame: keyboardFrame
+                keyboardFrame: keyboardFrame,
+                prefersKeyboardTopLayout: prefersKeyboardTopLayout
             )
             if let windowScene = overlayWindow?.windowScene {
                 overlayWindow?.frame = windowScene.screen.bounds

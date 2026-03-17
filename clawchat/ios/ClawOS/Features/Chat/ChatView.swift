@@ -18,6 +18,7 @@ struct ChatView: View {
     @State private var composerAttachments: [ComposerAttachment] = []
     @State private var attachmentErrorMessage: String?
     @State private var isVoiceRecording = false
+    @State private var isVoiceStarting = false
     @State private var isVoiceCancelActive = false
     @State private var scrollDebounceTask: Task<Void, Never>?
     @State private var speechService = SpeechRecognitionService()
@@ -35,9 +36,10 @@ struct ChatView: View {
     @State private var isTrackingScrollAnchor = false
     @State private var isWalkieTalkieRecording = false
     @FocusState private var isInputFocused: Bool
+    @State private var keyboardVisibleHeight: CGFloat = 0
 
-    private let hapticMedium = UIImpactFeedbackGenerator(style: .medium)
-    private let hapticLight = UIImpactFeedbackGenerator(style: .light)
+    private let hapticRigid = UIImpactFeedbackGenerator(style: .rigid)
+    private let hapticSoft = UIImpactFeedbackGenerator(style: .soft)
     private let maxAttachmentBytes = 5 * 1024 * 1024
     private let composerRowMinHeight: CGFloat = 24
     private let voiceComposerHeight: CGFloat = 64
@@ -120,7 +122,13 @@ struct ChatView: View {
                     .ignoresSafeArea(.keyboard, edges: .bottom)
             }
         }
-        .background(SiriGlowWindowPresenter(isActive: isVoiceRecording, dimmed: isVoiceCancelActive))
+        .background(
+            SiriGlowWindowPresenter(
+                isActive: isVoiceRecording || isVoiceStarting,
+                dimmed: isVoiceCancelActive,
+                prefersKeyboardTopLayout: false
+            )
+        )
         .background(InteractivePopGestureEnabler())
         .navigationBarBackButtonHidden(true)
         .toolbar {
@@ -150,8 +158,8 @@ struct ChatView: View {
             syncSelectedModel()
             syncStreamingDisplayState()
             isTrackingScrollAnchor = false
-            hapticMedium.prepare()
-            hapticLight.prepare()
+            hapticRigid.prepare()
+            hapticSoft.prepare()
         }
         .onChange(of: agent?.id) { _, _ in
             syncSelectedModel()
@@ -168,6 +176,12 @@ struct ChatView: View {
         .onChange(of: storedMessages.count) { _, _ in
             syncStreamingDisplayState()
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
+            updateKeyboardVisibleHeight(from: notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardVisibleHeight = 0
+        }
         .onDisappear {
             scrollDebounceTask?.cancel()
             scrollRestoreTask?.cancel()
@@ -176,6 +190,7 @@ struct ChatView: View {
             streamingDisplayTask = nil
             streamingScrollTask?.cancel()
             streamingScrollTask = nil
+            keyboardVisibleHeight = 0
         }
         .photosPicker(
             isPresented: $showPhotoPicker,
@@ -222,6 +237,7 @@ struct ChatView: View {
         .onDisappear {
             voiceFinalizeTask?.cancel()
             isWalkieTalkieRecording = false
+            isVoiceStarting = false
             if speechService.isRecording {
                 speechService.stopRecording()
             }
@@ -308,16 +324,45 @@ struct ChatView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
             .onChange(of: renderedMessages.count) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
+                if ChatAutoScrollPolicy.shouldScrollToBottom(for: .renderedMessagesChanged) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
             }
             .onChange(of: previewAssistantMessage?.id) { _, _ in
-                debouncedScrollToBottom(proxy: proxy)
+                if ChatAutoScrollPolicy.shouldScrollToBottom(for: .previewAssistantMessageChanged) {
+                    debouncedScrollToBottom(proxy: proxy)
+                }
             }
             .onChange(of: streamingDisplayText) { _, _ in
-                scheduleStreamingScrollToBottom(proxy: proxy)
+                if ChatAutoScrollPolicy.shouldScrollToBottom(for: .streamingTextChanged) {
+                    scheduleStreamingScrollToBottom(proxy: proxy)
+                }
             }
             .onChange(of: chatManager.isTyping) { _, _ in
-                debouncedScrollToBottom(proxy: proxy)
+                if ChatAutoScrollPolicy.shouldScrollToBottom(for: .typingStateChanged) {
+                    debouncedScrollToBottom(proxy: proxy)
+                }
+            }
+            .onChange(of: isInputFocused) { _, isFocused in
+                guard isFocused else { return }
+                guard ChatAutoScrollPolicy.shouldScrollToBottom(
+                    for: .inputFocusChanged,
+                    isInputFocused: isFocused
+                ) else {
+                    return
+                }
+                followBottomForComposerIntent(proxy: proxy)
+            }
+            .onChange(of: keyboardVisibleHeight) { oldHeight, newHeight in
+                guard oldHeight <= 0 else { return }
+                guard newHeight > 0 else { return }
+                guard ChatAutoScrollPolicy.shouldScrollToBottom(
+                    for: .keyboardFrameChanged,
+                    isInputFocused: isInputFocused
+                ) else {
+                    return
+                }
+                followBottomForComposerIntent(proxy: proxy)
             }
             .onTapGesture {
                 isInputFocused = false
@@ -338,6 +383,16 @@ struct ChatView: View {
         scrollDebounceTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(140))
             guard !Task.isCancelled else { return }
+            proxy.scrollTo("bottom", anchor: .bottom)
+        }
+    }
+
+    private func followBottomForComposerIntent(proxy: ScrollViewProxy) {
+        scrollDebounceTask?.cancel()
+        scrollRestoreTask?.cancel()
+        scrollRestoreTask = nil
+        isTrackingScrollAnchor = true
+        withAnimation(.easeOut(duration: 0.2)) {
             proxy.scrollTo("bottom", anchor: .bottom)
         }
     }
@@ -410,6 +465,22 @@ struct ChatView: View {
             viewportHeight: viewportHeight
         )
         appState.setChatScrollAnchor(anchorId, for: session.id)
+    }
+
+    private func updateKeyboardVisibleHeight(from notification: Notification) {
+        guard let frameValue = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue else {
+            return
+        }
+
+        let screenBounds = UIScreen.main.bounds
+        let keyboardFrame = frameValue.cgRectValue
+        let intersection = screenBounds.intersection(keyboardFrame)
+
+        if keyboardFrame.minY >= screenBounds.maxY - 1 || intersection.isNull || intersection.height < 44 {
+            keyboardVisibleHeight = 0
+        } else {
+            keyboardVisibleHeight = intersection.height
+        }
     }
 
     private func bufferedMessageItem(_ item: MessageBubbleItem) -> MessageBubbleItem {
@@ -579,35 +650,7 @@ struct ChatView: View {
 
     private var inputBar: some View {
         standardInputBar
-        .fixedSize(horizontal: false, vertical: true)
-        .overlay {
-            WalkieTalkieGestureView(
-                isEnabled: (!isInputFocused && !isVoiceRecording && !isVoiceFinalizing) || isWalkieTalkieRecording,
-                onTap: { isInputFocused = true },
-                onRecordStart: {
-                    isWalkieTalkieRecording = true
-                    hapticMedium.impactOccurred()
-                    Task { await beginRecording() }
-                },
-                onDragChanged: { dy in
-                    guard isVoiceRecording else { return }
-                    let shouldCancel = dy < -voiceCancelDragThreshold
-                    if shouldCancel != isVoiceCancelActive {
-                        withAnimation(.easeInOut(duration: 0.12)) {
-                            isVoiceCancelActive = shouldCancel
-                        }
-                        if shouldCancel {
-                            hapticLight.impactOccurred()
-                        }
-                    }
-                },
-                onRecordEnd: {
-                    guard isWalkieTalkieRecording else { return }
-                    isWalkieTalkieRecording = false
-                    endRecording()
-                }
-            )
-        }
+            .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }
@@ -624,30 +667,25 @@ struct ChatView: View {
 
                 if hasDraftContent {
                     sendButton
+                } else if isVoiceFinalizing {
+                    Circle()
+                        .fill(currentTheme.accent)
+                        .frame(width: 36, height: 36)
+                        .overlay {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                } else if isVoiceRecording || isVoiceStarting {
+                    recordingIndicator
                 } else {
-                    if isVoiceFinalizing {
-                        Circle()
-                            .fill(currentTheme.accent)
-                            .frame(width: 36, height: 36)
-                            .overlay {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(.white)
-                            }
-                            .transition(.scale.combined(with: .opacity))
-                    } else if isVoiceRecording {
-                        recordingIndicator
-                    } else {
-                        speakButton
-                    }
+                    speakButton
                 }
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 10)
         }
         .background(inputBarBackground)
-        .animation(.snappy(duration: 0.22), value: isVoiceRecording)
-        .animation(.snappy(duration: 0.22), value: isVoiceFinalizing)
     }
 
     private let voiceCancelDragThreshold: CGFloat = 50
@@ -693,15 +731,53 @@ struct ChatView: View {
                 composerAttachmentStrip
             }
 
-            ZStack(alignment: .topLeading) {
-                textField
-                    .opacity((isVoiceRecording || isVoiceFinalizing) ? 0 : 1)
+            composerFieldSurface
+        }
+    }
 
-                if isVoiceRecording || isVoiceFinalizing {
-                    activeRecordingField
-                        .transition(.opacity)
-                }
+    private var composerFieldSurface: some View {
+        ZStack(alignment: .topLeading) {
+            textField
+                .opacity(isVoiceActive ? 0 : 1)
+
+            if isVoiceActive {
+                activeRecordingField
             }
+        }
+        .overlay {
+            WalkieTalkieGestureView(
+                isEnabled: ChatVoiceOverlayPolicy.isWalkieTalkieOverlayEnabled(
+                    isInputFocused: isInputFocused,
+                    isVoiceRecording: isVoiceRecording,
+                    isVoiceFinalizing: isVoiceFinalizing,
+                    isWalkieTalkieRecording: isWalkieTalkieRecording
+                ) && !isVoiceStarting,
+                onTap: { isInputFocused = true },
+                onRecordStart: {
+                    guard !isVoiceStarting, !isVoiceRecording else { return }
+                    isVoiceStarting = true
+                    isWalkieTalkieRecording = true
+                    hapticRigid.impactOccurred()
+                    Task { await beginRecording() }
+                },
+                onDragChanged: { dy in
+                    guard isVoiceRecording else { return }
+                    let shouldCancel = dy < -voiceCancelDragThreshold
+                    if shouldCancel != isVoiceCancelActive {
+                        withAnimation(.easeInOut(duration: 0.12)) {
+                            isVoiceCancelActive = shouldCancel
+                        }
+                        if shouldCancel {
+                            hapticSoft.impactOccurred()
+                        }
+                    }
+                },
+                onRecordEnd: {
+                    guard isWalkieTalkieRecording else { return }
+                    isWalkieTalkieRecording = false
+                    endRecording()
+                }
+            )
         }
     }
 
@@ -744,11 +820,6 @@ struct ChatView: View {
 
     private var recordingOverlay: some View {
         HStack(spacing: 10) {
-            Image(systemName: "mic.fill")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.red)
-                .symbolEffect(.pulse, isActive: isVoiceRecording)
-
             RecordingPreviewView(
                 speechService: speechService,
                 frozenText: finalRecordingPreviewText,
@@ -790,9 +861,13 @@ struct ChatView: View {
         .animation(.easeInOut(duration: 0.15), value: isVoiceCancelActive)
     }
 
+    private var isVoiceActive: Bool {
+        isVoiceStarting || isVoiceRecording || isVoiceFinalizing
+    }
+
     private var textField: some View {
         TextField("输入文字或长按录音", text: $inputText, axis: .vertical)
-            .lineLimit(1...6)
+            .lineLimit(isVoiceActive ? 1...1 : 1...6)
             .textFieldStyle(.plain)
             .font(.body)
             .focused($isInputFocused)
@@ -805,7 +880,7 @@ struct ChatView: View {
 
     private func endRecording() {
         guard isVoiceRecording else { return }
-        hapticLight.impactOccurred()
+        hapticSoft.impactOccurred()
         let wasCancelled = isVoiceCancelActive
 
         let finalText = speechService.stopRecording()
@@ -814,11 +889,10 @@ struct ChatView: View {
         voiceFinalizeTask?.cancel()
         finalRecordingPreviewText = finalText
 
-        withAnimation(.snappy(duration: 0.25)) {
-            isVoiceRecording = false
-            isVoiceCancelActive = false
-            isVoiceFinalizing = !wasCancelled && !finalText.isEmpty
-        }
+        isVoiceStarting = false
+        isVoiceRecording = false
+        isVoiceCancelActive = false
+        isVoiceFinalizing = !wasCancelled && !finalText.isEmpty
 
         guard !wasCancelled, !finalText.isEmpty else {
             Task { @MainActor in
@@ -829,21 +903,11 @@ struct ChatView: View {
         }
 
         voiceFinalizeTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(140))
+            try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }
 
-            var transaction = Transaction()
-            transaction.animation = nil
-            withTransaction(transaction) {
-                inputText = finalText
-            }
-
-            withAnimation(.snappy(duration: 0.18)) {
-                isVoiceFinalizing = false
-            }
-
-            try? await Task.sleep(for: .milliseconds(40))
-            guard !Task.isCancelled else { return }
+            inputText = finalText
+            isVoiceFinalizing = false
             finalRecordingPreviewText = ""
             voiceFinalizeTask = nil
         }
@@ -957,7 +1021,6 @@ struct ChatView: View {
                 .background(Color(.label), in: Circle())
         }
         .buttonStyle(.plain)
-        .transition(.scale.combined(with: .opacity))
     }
 
     private func sendCurrentMessage() {
@@ -985,7 +1048,9 @@ struct ChatView: View {
 
     private var speakButton: some View {
         Button {
-            hapticMedium.impactOccurred()
+            guard !isVoiceStarting, !isVoiceRecording else { return }
+            isVoiceStarting = true
+            hapticRigid.impactOccurred()
             Task { await beginRecording() }
         } label: {
             HStack(spacing: 4) {
@@ -1000,12 +1065,26 @@ struct ChatView: View {
             .background(currentTheme.accent, in: Capsule())
             .contentShape(Capsule())
         }
+        .allowsHitTesting(
+            ChatVoiceOverlayPolicy.allowsDirectSpeakTap(
+                isInputFocused: isInputFocused,
+                isVoiceRecording: isVoiceRecording,
+                isVoiceFinalizing: isVoiceFinalizing,
+                isWalkieTalkieRecording: isWalkieTalkieRecording
+            )
+            && !isVoiceStarting
+        )
         .buttonStyle(.plain)
-        .transition(.scale.combined(with: .opacity))
     }
 
     private func beginRecording() async {
-        isInputFocused = false
+        guard isVoiceStarting, !isVoiceRecording else { return }
+
+        isVoiceCancelActive = false
+
+        if ChatVoiceOverlayPolicy.shouldDismissKeyboardBeforeRecording {
+            isInputFocused = false
+        }
         voiceFinalizeTask?.cancel()
         voiceFinalizeTask = nil
         isVoiceFinalizing = false
@@ -1014,11 +1093,13 @@ struct ChatView: View {
         let permissions = await SpeechRecognitionService.requestPermissions()
 
         guard permissions.mic else {
+            isVoiceStarting = false
             speechPermissionMessage = SpeechRecognitionService.SpeechError.microphoneDenied.localizedDescription
             showSpeechPermissionAlert = true
             return
         }
         guard permissions.speech else {
+            isVoiceStarting = false
             speechPermissionMessage = SpeechRecognitionService.SpeechError.recognitionDenied.localizedDescription
             showSpeechPermissionAlert = true
             return
@@ -1026,11 +1107,11 @@ struct ChatView: View {
 
         do {
             try speechService.startRecording()
-            withAnimation(.snappy(duration: 0.25)) {
-                isVoiceRecording = true
-                isVoiceCancelActive = false
-            }
+            isVoiceStarting = false
+            isVoiceRecording = true
+            isVoiceCancelActive = false
         } catch {
+            isVoiceStarting = false
             speechPermissionMessage = error.localizedDescription
             showSpeechPermissionAlert = true
         }
@@ -1050,7 +1131,6 @@ struct ChatView: View {
                 }
         }
         .buttonStyle(.plain)
-        .transition(.scale.combined(with: .opacity))
     }
 
     private func syncSelectedModel() {
@@ -1185,7 +1265,7 @@ private struct RecordingPreviewView: View {
     var body: some View {
         ZStack {
             Text(displayText)
-                .font(.system(size: 15, weight: .medium))
+                .font(.body)
                 .foregroundStyle(isPlaceholder ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .leading)

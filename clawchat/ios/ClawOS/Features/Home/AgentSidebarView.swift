@@ -4,7 +4,8 @@ enum HomeSidebarMetrics {
     static let sidebarWidth: CGFloat = 66
     static let sidebarLeadingPadding: CGFloat = 10
     static let hiddenCompensation: CGFloat = 2
-    static let travelWidth: CGFloat = sidebarWidth + sidebarLeadingPadding + hiddenCompensation
+    static let overshootPadding: CGFloat = 16
+    static let travelWidth: CGFloat = sidebarWidth + sidebarLeadingPadding + hiddenCompensation + overshootPadding
 
     static let avatarDiameter: CGFloat = 40
     static let controlDiameter: CGFloat = avatarDiameter
@@ -50,10 +51,10 @@ struct AgentSidebarView: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .mask(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .mask(Capsule())
         }
         .frame(maxHeight: .infinity)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        .glassEffect(.regular, in: .capsule)
         .sheet(isPresented: $showAddAgent) {
             AgentEditorView()
                 .environment(appState)

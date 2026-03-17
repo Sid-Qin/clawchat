@@ -6,19 +6,33 @@ struct HomeView: View {
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging = false
 
+    private static let settleSpring: Animation = .interpolatingSpring(
+        stiffness: 280, damping: 28
+    )
+
     private var resolvedOffset: CGFloat {
+        let travel = HomeSidebarMetrics.travelWidth
         if isDragging {
+            let raw: CGFloat
             if isSidebarOpen {
-                return HomeSidebarMetrics.travelWidth + min(0, dragOffset)
+                raw = travel + min(0, dragOffset)
             } else {
-                return min(HomeSidebarMetrics.travelWidth, max(0, dragOffset))
+                raw = max(0, dragOffset)
             }
+            return min(travel, Self.rubberBand(raw, limit: travel))
         }
-        return isSidebarOpen ? HomeSidebarMetrics.travelWidth : 0
+        return isSidebarOpen ? travel : 0
     }
 
     private var progress: CGFloat {
         min(1, max(0, resolvedOffset / HomeSidebarMetrics.travelWidth))
+    }
+
+    private static func rubberBand(_ offset: CGFloat, limit: CGFloat) -> CGFloat {
+        guard offset > 0, limit > 0 else { return offset }
+        if offset <= limit { return offset }
+        let overshoot = offset - limit
+        return limit + overshoot / (1 + overshoot / (limit * 0.4))
     }
 
     var body: some View {
@@ -31,33 +45,26 @@ struct HomeView: View {
             .ignoresSafeArea()
 
             SessionListView(
-                isSidebarDragging: isDragging || isSidebarOpen,
-                onMenuTap: {
-                    withAnimation(.interpolatingSpring(stiffness: 400, damping: 35)) {
-                        isSidebarOpen = true
-                    }
-                }
+                isSidebarDragging: isDragging || isSidebarOpen
             )
             .blur(radius: progress * 6)
-            .scaleEffect(1.0 - progress * 0.03)
 
             Color.black
                 .opacity(Double(progress) * 0.15)
                 .ignoresSafeArea()
                 .allowsHitTesting(isSidebarOpen && !isDragging)
                 .onTapGesture {
-                    withAnimation(.interpolatingSpring(stiffness: 400, damping: 35)) {
+                    withAnimation(Self.settleSpring) {
                         isSidebarOpen = false
                     }
                 }
 
             AgentSidebarView(onDismiss: {
-                withAnimation(.interpolatingSpring(stiffness: 400, damping: 35)) {
+                withAnimation(Self.settleSpring) {
                     isSidebarOpen = false
                 }
             })
             .frame(width: HomeSidebarMetrics.sidebarWidth)
-            .shadow(color: .black.opacity(0.15 * Double(progress)), radius: 20, x: 6, y: 0)
             .padding(.top, 12)
             .padding(.bottom, 96)
             .padding(.leading, HomeSidebarMetrics.sidebarLeadingPadding)
@@ -70,18 +77,18 @@ struct HomeView: View {
     }
 
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 10, coordinateSpace: .global)
+        DragGesture(minimumDistance: 12, coordinateSpace: .global)
             .onChanged { value in
                 let dx = value.translation.width
                 let dy = value.translation.height
                 let startX = value.startLocation.x
 
                 if !isDragging {
-                    guard abs(dx) > abs(dy) * 1.2 else { return }
+                    guard abs(dx) > abs(dy) * 1.4 else { return }
 
                     if isSidebarOpen {
                         isDragging = true
-                    } else if dx > 0 && startX < 40 { // Only allow opening from the left edge (40pt)
+                    } else if dx > 0 && startX < 44 {
                         isDragging = true
                     }
                 }
@@ -95,14 +102,15 @@ struct HomeView: View {
 
                 let v = value.velocity.width
                 let final = resolvedOffset
+                let travel = HomeSidebarMetrics.travelWidth
 
-                withAnimation(.interpolatingSpring(stiffness: 400, damping: 35)) {
+                withAnimation(Self.settleSpring) {
                     if isSidebarOpen {
-                        if final < HomeSidebarMetrics.travelWidth * 0.5 || v < -200 {
+                        if final < travel * 0.45 || v < -400 {
                             isSidebarOpen = false
                         }
                     } else {
-                        if final > HomeSidebarMetrics.travelWidth * 0.4 || v > 200 {
+                        if final > travel * 0.45 || v > 400 {
                             isSidebarOpen = true
                         }
                     }

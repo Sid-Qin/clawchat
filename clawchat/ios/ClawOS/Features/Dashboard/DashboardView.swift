@@ -2,230 +2,193 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
-    @State private var selectedPeriod = 0
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var viewModel = DashboardViewModel()
+    @State private var selectedTab: Int = 0
 
-    private var currentTheme: AppVisualTheme {
-        appState.currentVisualTheme
-    }
+    private var theme: AppVisualTheme { appState.currentVisualTheme }
 
     var body: some View {
-        List {
-            if appState.clawChatManager.isConnected {
-                tokenUsageSection
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
+        VStack(spacing: 0) {
+            headerTabs
 
-                configSection
+            TabView(selection: $selectedTab) {
+                feedPage(moments: viewModel.mockMoments)
+                    .tag(0)
 
-                diagnosticsSection
-
-                maintenanceSection
+                feedPage(moments: viewModel.mockMoments.filter { $0.isFollowed })
+                    .tag(1)
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
         }
-        .listStyle(.insetGrouped)
-        .scrollIndicators(.hidden)
-        .scrollContentBackground(.hidden)
         .background {
             LinearGradient(
-                colors: [currentTheme.pageGradientTop, currentTheme.pageGradientBottom],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                colors: [theme.pageGradientTop, theme.pageGradientBottom],
+                startPoint: .top,
+                endPoint: .bottom
             )
-            .overlay {
-                if let name = currentTheme.ambientAssetName {
-                    Image(name)
-                        .resizable()
-                        .scaledToFill()
-                        .opacity(currentTheme.ambientOpacity)
-                        .blur(radius: 0.5)
-                }
-            }
             .ignoresSafeArea()
         }
         .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(for: String.self) { momentId in
+            if let moment = viewModel.mockMoments.first(where: { $0.id == momentId }) {
+                MomentDetailView(moment: moment)
+            }
+        }
     }
 
-    // MARK: - Connection Status
+    // MARK: - Feed Page
 
-    private var connectionSection: some View {
-        Section("CLAWCHAT 连接") {
-            HStack(spacing: 12) {
-                Image(systemName: linkIcon)
-                    .font(.system(size: 22))
-                    .foregroundStyle(linkColor)
-                    .frame(width: 32)
+    private func cardHeight(for moment: MockMoment) -> CGFloat {
+        let imgHeight = CGFloat(220 + (abs(moment.id.hashValue) % 80))
+        return imgHeight + 80
+    }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(linkLabel)
-                        .font(.subheadline.weight(.semibold))
-                    if appState.clawChatManager.isConnected {
-                        Text("Gateway \(appState.clawChatManager.gatewayOnline ? "在线" : "离线")")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+    private func splitColumns(_ moments: [MockMoment]) -> ([MockMoment], [MockMoment]) {
+        var left: [MockMoment] = []
+        var right: [MockMoment] = []
+        var leftH: CGFloat = 0
+        var rightH: CGFloat = 0
+
+        for moment in moments {
+            let h = cardHeight(for: moment) + 6
+            if leftH <= rightH {
+                left.append(moment)
+                leftH += h
+            } else {
+                right.append(moment)
+                rightH += h
+            }
+        }
+        return (left, right)
+    }
+
+    private func gridHeight(for moments: [MockMoment]) -> CGFloat {
+        let (leftCol, rightCol) = splitColumns(moments)
+        let leftH = leftCol.reduce(CGFloat(0)) { $0 + cardHeight(for: $1) + 6 }
+        let rightH = rightCol.reduce(CGFloat(0)) { $0 + cardHeight(for: $1) + 6 }
+        return max(leftH, rightH)
+    }
+
+    private func feedPage(moments: [MockMoment]) -> some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 0) {
+                Color.clear.frame(height: 6)
+                
+                if moments.isEmpty {
+                    emptyState
+                } else {
+                    let (leftCol, rightCol) = splitColumns(moments)
+
+                    GeometryReader { geo in
+                        let colWidth = (geo.size.width - 6 * 2 - 6) / 2
+
+                        HStack(alignment: .top, spacing: 6) {
+                            LazyVStack(spacing: 6) {
+                                ForEach(leftCol) { moment in
+                                    NavigationLink(value: moment.id) {
+                                        MomentsCardView(
+                                            moment: moment,
+                                            colorScheme: colorScheme,
+                                            theme: theme
+                                        )
+                                        .frame(width: colWidth)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .frame(width: colWidth)
+
+                            LazyVStack(spacing: 6) {
+                                ForEach(rightCol) { moment in
+                                    NavigationLink(value: moment.id) {
+                                        MomentsCardView(
+                                            moment: moment,
+                                            colorScheme: colorScheme,
+                                            theme: theme
+                                        )
+                                        .frame(width: colWidth)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .frame(width: colWidth)
+                        }
+                        .padding(.horizontal, 6)
                     }
+                    .frame(height: gridHeight(for: moments))
                 }
 
-                Spacer()
-
-                if case .connecting = appState.clawChatManager.linkState {
-                    ProgressView().controlSize(.small)
-                }
+                Spacer().frame(height: 100)
             }
-            .padding(.vertical, 4)
+        }
+        .refreshable {
+            await viewModel.refresh()
         }
     }
 
-    private var linkIcon: String {
-        switch appState.clawChatManager.linkState {
-        case .connected: "checkmark.circle.fill"
-        case .connecting: "arrow.triangle.2.circlepath"
-        case .disconnected: "wifi.slash"
-        case .unpaired: "link.badge.plus"
-        case .error: "exclamationmark.triangle.fill"
-        }
+    // MARK: - Header Tabs
+
+    private var headerBg: Color {
+        colorScheme == .dark ? Color(white: 0.08) : .white
     }
 
-    private var linkLabel: String {
-        switch appState.clawChatManager.linkState {
-        case .connected: "已连接"
-        case .connecting: "连接中…"
-        case .disconnected: "已断开"
-        case .unpaired: "未配对"
-        case .error(let msg): msg
+    private var headerTabs: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 28) {
+                tabButton(title: "发现", index: 0)
+                tabButton(title: "关注", index: 1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
+            .frame(height: 50)
+
+            Divider().opacity(0.3)
         }
+        .background(headerBg)
     }
 
-    private var linkColor: Color {
-        switch appState.clawChatManager.linkState {
-        case .connected: .green
-        case .connecting: .orange
-        case .disconnected, .unpaired: .secondary
-        case .error: .red
+    private func tabButton(title: String, index: Int) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                selectedTab = index
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Text(title)
+                    .font(.system(size: selectedTab == index ? 18 : 16, weight: selectedTab == index ? .bold : .medium))
+                    .foregroundStyle(selectedTab == index ? Color(.label) : Color(.secondaryLabel))
+
+                Capsule()
+                    .fill(selectedTab == index ? theme.accent : Color.clear)
+                    .frame(width: 20, height: 3)
+            }
         }
+        .buttonStyle(.plain)
     }
 
-    // MARK: - Token Usage
+    // MARK: - Empty state
 
-    private var tokenUsageSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
-                HStack {
-                    Text("Token 用量")
-                        .font(.headline)
-                    Spacer()
-                    Picker("", selection: $selectedPeriod) {
-                        Text("7天").tag(0)
-                        Text("30天").tag(1)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 120)
-                }
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "sparkles.rectangle.stack")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 44, height: 44)
+                .foregroundStyle(Color(.systemGray3))
 
-                Text("0")
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
-
-                Text("tokens - 过去 7 天")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 0) {
-                    tokenStat(label: "输入", value: "0")
-                    Spacer()
-                    tokenStat(label: "输出", value: "0")
-                    Spacer()
-                    tokenStat(label: "缓存", value: "0")
-                }
-                .padding(12)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: AppTheme.Radius.md))
-            }
-            .padding(AppTheme.Spacing.lg)
-            .background {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    currentTheme.softFill.opacity(0.95),
-                                    Color(.systemBackground).opacity(0.68),
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-
-                    if let bannerAssetName = currentTheme.bannerAssetName {
-                        Image(bannerAssetName)
-                            .resizable()
-                            .scaledToFill()
-                            .opacity(0.08)
-                            .rotationEffect(.degrees(-12))
-                            .scaleEffect(1.4)
-                            .blendMode(.multiply)
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(currentTheme.softStroke.opacity(0.9), lineWidth: 0.9)
-            )
-        }
-    }
-
-    private func tokenStat(label: String, value: String) -> some View {
-        VStack(spacing: 4) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-        }
-    }
-
-    // MARK: - Config
-
-    private var configSection: some View {
-        Section("OPENCLAW 配置") {
-            NavigationLink { Text("查看配置") } label: {
-                Label("查看配置", systemImage: "doc.text")
-            }
-            NavigationLink { Text("恢复配置备份") } label: {
-                Label("恢复配置备份", systemImage: "arrow.clockwise")
-            }
-            NavigationLink { Text("开启 Skills Watch") } label: {
-                Label("开启 Skills Watch", systemImage: "eye")
+            VStack(spacing: 6) {
+                Text("暂无动态")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color(.secondaryLabel))
+                Text("关注感兴趣的创作者，这里会展示他们的最新动态")
+                    .font(.caption)
+                    .foregroundStyle(Color(.tertiaryLabel))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
             }
         }
-    }
-
-    // MARK: - Diagnostics
-
-    private var diagnosticsSection: some View {
-        Section("诊断与日志") {
-            NavigationLink { Text("运行诊断") } label: {
-                Label("运行诊断", systemImage: "cross.case")
-            }
-            NavigationLink { Text("查看日志") } label: {
-                Label("查看日志", systemImage: "list.bullet")
-            }
-        }
-    }
-
-    // MARK: - Maintenance
-
-    private var maintenanceSection: some View {
-        Section("系统维护") {
-            NavigationLink { Text("工具权限修复") } label: {
-                Label("工具权限修复", systemImage: "wrench.and.screwdriver")
-            }
-            Button(role: .destructive) { } label: {
-                Label("重启 Gateway", systemImage: "power")
-            }
-            NavigationLink { Text("更新 openclaw") } label: {
-                Label("更新 openclaw", systemImage: "arrow.up.circle")
-            }
-        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 160)
     }
 }
