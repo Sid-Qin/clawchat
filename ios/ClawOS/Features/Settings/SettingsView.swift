@@ -7,7 +7,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("isDarkMode") private var isDarkMode = false
-    @State private var showLoginSheet = false
+    @State private var showLinkStart = false
     @State private var showPrivacyPolicy = false
     @State private var showTermsOfService = false
 
@@ -54,8 +54,8 @@ struct SettingsView: View {
         }
         .navigationBarBackButtonHidden(true)
         .background(InteractivePopGestureEnabler())
-        .sheet(isPresented: $showLoginSheet) {
-            LoginView { showLoginSheet = false }
+        .sheet(isPresented: $showLinkStart) {
+            LoginView { showLinkStart = false }
                 .environment(appState)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
@@ -98,7 +98,7 @@ struct SettingsView: View {
     // MARK: - Profile Card
 
     private var profileCard: some View {
-        Button { showLoginSheet = true } label: {
+        Button { showLinkStart = true } label: {
             HStack(spacing: 14) {
                 Image(systemName: "person.crop.circle.fill")
                     .resizable()
@@ -106,10 +106,10 @@ struct SettingsView: View {
                     .foregroundStyle(theme.accent.opacity(0.6))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("登录 / 注册")
-                        .font(.system(size: 17, weight: .bold))
+                    Text("LINK START")
+                        .font(.system(size: 17, weight: .bold, design: .monospaced))
                         .foregroundStyle(Color(.label))
-                    Text("登录后可同步数据和 Agent 配置")
+                    Text("点击进入 ClawOS")
                         .font(.system(size: 13))
                         .foregroundStyle(Color(.secondaryLabel))
                 }

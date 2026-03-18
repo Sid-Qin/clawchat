@@ -77,7 +77,7 @@ struct SessionListView: View {
             }
             .padding(.horizontal, 14)
             .frame(height: 36)
-            .adaptiveGlass(in: .capsule)
+            .glassEffect(.regular, in: .capsule)
 
             Button {
                 _ = appState.startNewSession()
@@ -88,7 +88,7 @@ struct SessionListView: View {
                     .frame(width: 36, height: 36)
                     .contentShape(Circle())
             }
-            .adaptiveGlass(in: .circle)
+            .glassEffect(.regular, in: .circle)
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
         .padding(.top, 8)
@@ -536,7 +536,7 @@ struct SessionRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            agentAvatar(agent, size: 44)
+            agentAvatar(agent, size: 40)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack {

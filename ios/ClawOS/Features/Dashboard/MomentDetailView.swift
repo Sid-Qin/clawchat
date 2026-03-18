@@ -3,71 +3,64 @@ import SwiftUI
 struct MomentDetailOverlay: View {
     @Environment(AppState.self) private var appState
     let moment: MockMoment
-    
+
     @State private var dragOffset: CGSize = .zero
     @State private var isDragging = false
     @State private var isPresented = false
-    
     @State private var selectedImageIndex = 0
-    
+
+    private var dragMagnitude: CGFloat {
+        hypot(dragOffset.width, dragOffset.height)
+    }
+
+    private var dismissProgress: CGFloat {
+        min(1, dragMagnitude / 320)
+    }
+
     var body: some View {
         ZStack {
-            // Background dimming
             Color.black
-                .opacity(isPresented ? max(0, 0.8 - Double(abs(dragOffset.width) / 500) - Double(abs(dragOffset.height) / 500)) : 0)
+                .opacity(isPresented ? Double(1 - dismissProgress) * 0.8 : 0)
                 .ignoresSafeArea()
-                .onTapGesture {
-                    dismiss()
-                }
-            
-            // Main Content
+                .onTapGesture { dismiss() }
+
             MomentDetailView(moment: moment, selectedImageIndex: $selectedImageIndex, onDismiss: { dismiss() })
                 .ignoresSafeArea()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: isDragging ? 32 : 0, style: .continuous))
-                .scaleEffect(isDragging ? max(0.75, 1.0 - abs(dragOffset.width) / 800 - abs(dragOffset.height) / 800) : 1.0)
+                .compositingGroup()
+                .clipShape(RoundedRectangle(cornerRadius: isDragging ? 24 : 0, style: .continuous))
+                .scaleEffect(isDragging ? max(0.8, 1.0 - dismissProgress * 0.2) : 1.0)
                 .offset(x: dragOffset.width, y: dragOffset.height)
-                .rotation3DEffect(
-                    .degrees(Double(dragOffset.width) / 30),
-                    axis: (x: 0, y: 1, z: 0),
-                    perspective: 0.3
-                )
-                .shadow(color: .black.opacity(isDragging ? 0.3 : 0), radius: 20, x: 0, y: 10)
                 .offset(x: isPresented ? 0 : UIScreen.main.bounds.width)
                 .gesture(
                     DragGesture()
                         .onChanged { value in
                             if !isDragging {
-                                // Start dragging if swiping from the left edge
-                                // OR if swiping downwards
-                                // OR if swiping right on the first image
                                 let isEdgeSwipe = value.startLocation.x < 40 && value.translation.width > 0
                                 let isDownwardSwipe = value.translation.height > abs(value.translation.width)
                                 let isRightSwipeOnFirstImage = selectedImageIndex == 0 && value.translation.width > 0 && abs(value.translation.width) > abs(value.translation.height)
-                                
+
                                 if isEdgeSwipe || isDownwardSwipe || isRightSwipeOnFirstImage {
                                     isDragging = true
                                 }
                             }
-                            
+
                             if isDragging {
                                 dragOffset = value.translation
                             }
                         }
                         .onEnded { value in
                             guard isDragging else { return }
-                            
-                            let velocityX = value.velocity.width
-                            let velocityY = value.velocity.height
-                            let transX = value.translation.width
-                            let transY = value.translation.height
-                            
-                            // Dismiss if dragged far enough or fast enough
-                            if abs(transX) > 120 || abs(transY) > 150 || abs(velocityX) > 500 || abs(velocityY) > 500 {
-                                dismiss(velocityX: velocityX, velocityY: velocityY)
+
+                            let vx = value.velocity.width
+                            let vy = value.velocity.height
+                            let tx = value.translation.width
+                            let ty = value.translation.height
+
+                            if abs(tx) > 120 || abs(ty) > 150 || abs(vx) > 500 || abs(vy) > 500 {
+                                dismiss(velocityX: vx, velocityY: vy)
                             } else {
-                                // Snap back
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
                                     dragOffset = .zero
                                     isDragging = false
                                 }
@@ -76,27 +69,27 @@ struct MomentDetailOverlay: View {
                 )
         }
         .onAppear {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
                 isPresented = true
             }
         }
     }
-    
+
     private func dismiss(velocityX: CGFloat = 0, velocityY: CGFloat = 0) {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            if velocityX > 0 || dragOffset.width > 50 {
-                dragOffset.width = UIScreen.main.bounds.width
-            } else if velocityX < 0 || dragOffset.width < -50 {
-                dragOffset.width = -UIScreen.main.bounds.width
-            } else if velocityY > 0 || dragOffset.height > 50 {
-                dragOffset.height = UIScreen.main.bounds.height
+        let sw = UIScreen.main.bounds.width + 60
+        let sh = UIScreen.main.bounds.height + 60
+
+        withAnimation(.easeOut(duration: 0.26)) {
+            if abs(velocityX) > abs(velocityY) || abs(dragOffset.width) > abs(dragOffset.height) {
+                dragOffset.width = velocityX >= 0 && dragOffset.width >= 0 ? sw : -sw
+                dragOffset.height += velocityY * 0.06
             } else {
-                isPresented = false
+                dragOffset.height = velocityY >= 0 && dragOffset.height >= 0 ? sh : -sh
+                dragOffset.width += velocityX * 0.06
             }
-            isDragging = false
         }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
             appState.selectedMoment = nil
         }
     }
