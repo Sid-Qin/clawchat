@@ -1,41 +1,112 @@
 # ClawChat
 
-First-party messaging apps for [OpenClaw](https://github.com/openclaw/openclaw). Talk to your AI agents from any device -- no third-party chat platform required.
+First-party messaging apps for [OpenClaw](https://github.com/openclaw/openclaw). Talk to your AI agents from any device — no third-party chat platform required.
 
 ## How It Works
 
-ClawChat follows the same pattern as existing OpenClaw channels (Telegram, Discord, Slack): your gateway connects **outbound** to a relay service. Your phone also connects **outbound** to the same relay. No public IP or port forwarding needed.
+ClawChat follows the same outbound-only pattern as other OpenClaw channels (Telegram, Discord, Slack). Both your gateway and your phone connect **outbound** to a shared relay. No public IP or port forwarding needed.
 
 ```
 Your Phone ──> ClawChat Relay <── Your OpenClaw Gateway (behind NAT)
 ```
 
-## Features
+## Installation
 
-- **Full OpenClaw capability surface** -- streaming text, reasoning blocks, tool visualization, approval flows, canvas/A2UI, polls, reactions, threads
-- **No public IP required** -- gateway stays behind NAT, just like with Telegram/Discord
-- **Native mobile apps** -- iOS (SwiftUI) + Android (Jetpack Compose)
-- **Push notifications** -- get notified when your agent needs attention
-- **Multi-gateway** -- connect to multiple OpenClaw instances from one app
-- **Self-hostable relay** -- run your own relay if you prefer
+### 1. Install the plugin
+
+```bash
+# Build first
+cd plugin && bun install && bun run build && cd ..
+
+# Install into OpenClaw
+openclaw plugins install ./plugin
+```
+
+Or copy directly to the user plugin directory:
+
+```bash
+cp -r plugin ~/.openclaw/extensions/clawchat
+```
+
+### 2. Configure
+
+Add to `~/.openclaw/openclaw.yaml`:
+
+```yaml
+channels:
+  clawchat:
+    accounts:
+      default:
+        token: <your-relay-gateway-token>
+        # Optional — defaults shown:
+        # relay: wss://clawchat-production-db31.up.railway.app
+        # session: clawchat
+```
+
+The `token` is your gateway registration token for the relay. Keep it secret.
+
+### 3. Restart OpenClaw
+
+The plugin starts automatically with the gateway. Check logs for:
+
+```
+[clawchat] Starting gateway accountId=default relay=wss://...
+[clawchat] Registered. Paired devices: 0
+```
+
+### 4. Pair your phone
+
+In any OpenClaw chat (webchat, Telegram, etc.), run:
+
+```
+/clawchat pair
+```
+
+This calls the relay and returns a 6-character pairing code and relay URL:
+
+```
+ClawChat Pairing Code
+
+ABC-123
+
+Relay: wss://clawchat-production-db31.up.railway.app
+Expires: 14:32:00
+
+Open ClawChat app → Settings → Pair Gateway,
+enter the relay URL and code above.
+```
+
+Open the ClawChat iOS or Android app, go to **Settings → Pair Gateway**, enter the relay URL and code. Done.
 
 ## Project Structure
 
 | Directory | Description |
 |-----------|-------------|
-| `frontend/` | React Native (Expo) mobile app — Discord-style UI for agent chat |
-| `ios/` | Native iOS client (SwiftUI) |
-| `android/` | Native Android client (Jetpack Compose) |
-| `service/` | Relay service backend |
-| `cli/` | Command-line interface |
-| `packages/protocol/` | Shared protocol definitions |
-| `openspec/` | Architecture specifications |
+| `plugin/` | OpenClaw channel plugin — installs into OpenClaw gateway |
+| `ios/` | Native iOS app (SwiftUI, iOS 17+) |
+| `android/` | Native Android app (Jetpack Compose, API 26+) |
+| `service/` | ClawChat relay service (Bun) |
+| `cli/` | CLI reference client |
+| `packages/` | Shared protocol types (TypeScript) |
+| `openspec/` | Architecture specs and wire protocol |
 
-## Status
+## Self-Hosting the Relay
 
-Early development. See [architecture specs](openspec/specs/architecture/) for the design.
+```bash
+cd service && bun install && bun dev
+```
 
-The `frontend/` directory contains a working React Native prototype with full UI implementation. See [frontend/README.md](frontend/README.md) for setup instructions.
+Then set `relay: ws://localhost:3000` in your plugin config.
+
+## Features
+
+- Streaming text with real-time token display
+- Thinking / reasoning blocks (collapsible)
+- Tool execution progress
+- Approval dialogs
+- No public IP required — gateway stays behind NAT
+- Multi-gateway support
+- Self-hostable relay
 
 ## License
 
