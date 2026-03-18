@@ -81,10 +81,8 @@ struct SiriGlowBorderView: View {
                     }
                     .opacity(dimmed ? 0.3 : 1.0)
                 }
-                .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.08), value: isActive)
         .animation(.easeOut(duration: 0.1), value: dimmed)
         .allowsHitTesting(false)
         .ignoresSafeArea()
@@ -340,7 +338,8 @@ struct SiriGlowWindowPresenter: UIViewRepresentable {
             if let windowScene = overlayWindow?.windowScene {
                 overlayWindow?.frame = windowScene.screen.bounds
             }
-            overlayWindow?.isHidden = !isActive
+            // Keep the transparent overlay window warm so glow activation stays in sync.
+            overlayWindow?.isHidden = false
         }
 
         func teardown() {

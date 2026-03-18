@@ -11,6 +11,7 @@ final class SpeechRecognitionService {
     private var audioEngine = AVAudioEngine()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    private var hasInstalledTap = false
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
 
     enum SpeechError: LocalizedError {
@@ -35,20 +36,64 @@ final class SpeechRecognitionService {
 
     // MARK: - Permissions
 
-    static func requestPermissions() async -> (mic: Bool, speech: Bool) {
-        let mic = await withCheckedContinuation { continuation in
-            AVAudioApplication.requestRecordPermission { granted in
-                continuation.resume(returning: granted)
-            }
+    static func requestPermissionsIfNeeded() async -> (mic: Bool, speech: Bool) {
+        let mic = await microphonePermissionIfNeeded()
+        guard mic else {
+            return (mic: false, speech: false)
         }
 
-        let speech = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: status == .authorized)
+        let speech = await speechPermissionIfNeeded()
+        return (mic: mic, speech: speech)
+    }
+
+    private static func microphonePermissionIfNeeded() async -> Bool {
+        switch AVAudioSession.sharedInstance().recordPermission {
+        case .granted:
+            return true
+        case .denied:
+            return false
+        case .undetermined:
+            return await withCheckedContinuation { continuation in
+                AVAudioApplication.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
             }
+        @unknown default:
+            return false
+        }
+    }
+
+    private static func speechPermissionIfNeeded() async -> Bool {
+        switch SFSpeechRecognizer.authorizationStatus() {
+        case .authorized:
+            return true
+        case .denied, .restricted:
+            return false
+        case .notDetermined:
+            return await withCheckedContinuation { continuation in
+                SFSpeechRecognizer.requestAuthorization { status in
+                    continuation.resume(returning: status == .authorized)
+                }
+            }
+        @unknown default:
+            return false
+        }
+    }
+
+    func prepareFastStartIfAuthorized() async {
+        guard Self.hasGrantedPermissions else { return }
+        do {
+            try configureAudioSession(activate: false)
+        } catch {
+            return
         }
 
-        return (mic, speech)
+        _ = speechRecognizer?.isAvailable
+    }
+
+    private static var hasGrantedPermissions: Bool {
+        AVAudioSession.sharedInstance().recordPermission == .granted
+            && SFSpeechRecognizer.authorizationStatus() == .authorized
     }
 
     // MARK: - Recording
@@ -58,15 +103,17 @@ final class SpeechRecognitionService {
             throw SpeechError.recognizerUnavailable
         }
 
-        stopRecordingInternal()
+        stopRecordingInternal(deactivateSession: false)
+        // Recreate the engine each session to avoid stale tap/sample-rate state
+        // after rapid stop/start on real devices.
+        audioEngine = AVAudioEngine()
 
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
-        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        try configureAudioSession(activate: true)
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        request.requiresOnDeviceRecognition = speechRecognizer.supportsOnDeviceRecognition
+        request.taskHint = .dictation
+        request.addsPunctuation = false
         recognitionRequest = request
 
         transcribedText = ""
@@ -91,66 +138,74 @@ final class SpeechRecognitionService {
         }
 
         let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        let recordingFormat = inputNode.inputFormat(forBus: 0)
+        guard recordingFormat.channelCount > 0, recordingFormat.sampleRate > 0 else {
+            throw SpeechError.recordingFailed("输入音频格式不可用")
+        }
+
+        if hasInstalledTap {
+            inputNode.removeTap(onBus: 0)
+            hasInstalledTap = false
+        }
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
             self?.updateAudioLevel(buffer: buffer)
         }
+        hasInstalledTap = true
 
         audioEngine.prepare()
-        try audioEngine.start()
+        do {
+            try audioEngine.start()
+        } catch {
+            stopRecordingInternal()
+            throw error
+        }
         isRecording = true
     }
 
     @discardableResult
     func stopRecording() -> String {
         let finalText = transcribedText
-
-        recognitionRequest?.endAudio()
-        recognitionTask?.finish()
-
-        let engine = audioEngine
-        let request = recognitionRequest
-        let task = recognitionTask
-        recognitionRequest = nil
-        recognitionTask = nil
-        isRecording = false
-        audioLevel = 0
-
-        Task.detached(priority: .utility) {
-            if engine.isRunning {
-                engine.stop()
-                engine.inputNode.removeTap(onBus: 0)
-            }
-            _ = request
-            _ = task
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        }
-
+        stopRecordingInternal()
         return finalText
     }
 
-    private func stopRecordingInternal() {
+    private func stopRecordingInternal(deactivateSession: Bool = true) {
         recognitionRequest?.endAudio()
         recognitionTask?.finish()
-
-        let engine = audioEngine
-        let request = recognitionRequest
-        let task = recognitionTask
         recognitionRequest = nil
         recognitionTask = nil
+
+        if hasInstalledTap {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            hasInstalledTap = false
+        }
+
+        if audioEngine.isRunning {
+            audioEngine.stop()
+        }
+        audioEngine.reset()
+        audioEngine = AVAudioEngine()
         isRecording = false
         audioLevel = 0
 
-        Task.detached(priority: .utility) {
-            if engine.isRunning {
-                engine.stop()
-                engine.inputNode.removeTap(onBus: 0)
-            }
-            _ = request
-            _ = task
+        if deactivateSession {
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
+    }
+
+    private func configureAudioSession(activate: Bool) throws {
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setCategory(
+            .playAndRecord,
+            mode: .measurement,
+            options: [.defaultToSpeaker, .allowBluetoothHFP]
+        )
+        try? audioSession.setPreferredIOBufferDuration(0.005)
+
+        if activate {
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         }
     }
 

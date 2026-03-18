@@ -34,10 +34,28 @@ enum AppTheme {
 extension AgentStatus {
     var color: Color {
         switch self {
-        case .online: Color(.label)
-        case .idle: Color(.tertiaryLabel)
-        case .dnd: Color(.secondaryLabel)
+        case .online: .green
+        case .idle: .orange
+        case .dnd: .red
         case .offline: Color(.quaternaryLabel)
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .online: "在线"
+        case .idle: "闲置"
+        case .dnd: "勿扰"
+        case .offline: "离线"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .online: "checkmark.circle.fill"
+        case .idle: "moon.fill"
+        case .dnd: "minus.circle.fill"
+        case .offline: "wifi.slash"
         }
     }
 }

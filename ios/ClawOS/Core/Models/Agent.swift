@@ -17,4 +17,5 @@ struct Agent: Identifiable, Codable, Hashable {
     var model: String?
     var availableModels: [String]?
     var theme: String?
+    var totalTokens: Int?
 }

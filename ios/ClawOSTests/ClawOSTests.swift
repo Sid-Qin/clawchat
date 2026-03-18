@@ -254,9 +254,17 @@ struct ClawOSTests {
         #expect(HomeSidebarMetrics.addButtonDiameter == HomeSidebarMetrics.avatarDiameter)
     }
 
-    @Test("sidebar 宽度收窄到 66pt")
+    @Test("sidebar 单列宽度为 66pt")
     func sidebarUsesCompactWidth() {
-        #expect(HomeSidebarMetrics.sidebarWidth == 66)
+        #expect(HomeSidebarMetrics.singleColumnWidth == 66)
+    }
+
+    @Test("sidebar 最多仅支持双列展开")
+    func sidebarSupportsAtMostTwoColumns() {
+        #expect(HomeSidebarMetrics.columns(for: 1) == 1)
+        #expect(HomeSidebarMetrics.columns(for: 2) == 2)
+        #expect(HomeSidebarMetrics.columns(for: 3) == 2)
+        #expect(HomeSidebarMetrics.doubleColumnWidth > HomeSidebarMetrics.singleColumnWidth)
     }
 
     @Test("session 长按预览默认锚定到最后一条消息")

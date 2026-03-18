@@ -75,6 +75,9 @@ struct SessionListView: View {
                     .transition(.scale.combined(with: .opacity))
                 }
             }
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .adaptiveGlass(in: .capsule)
 
             Button {
                 _ = appState.startNewSession()
@@ -185,7 +188,7 @@ struct SessionRowContainer: View {
             actionButtons
             foregroundRow
         }
-        .frame(height: 64)
+        .frame(height: 76)
         .clipped()
         .contextMenu {
             Button {
@@ -573,7 +576,7 @@ struct SessionRowView: View {
             }
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
-        .padding(.vertical, 10)
+        .padding(.vertical, 14)
         .contentShape(Rectangle())
     }
 

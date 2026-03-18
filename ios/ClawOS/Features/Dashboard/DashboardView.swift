@@ -30,11 +30,6 @@ struct DashboardView: View {
             .ignoresSafeArea()
         }
         .toolbar(.hidden, for: .navigationBar)
-        .navigationDestination(for: String.self) { momentId in
-            if let moment = viewModel.mockMoments.first(where: { $0.id == momentId }) {
-                MomentDetailView(moment: moment)
-            }
-        }
     }
 
     // MARK: - Feed Page
@@ -86,7 +81,11 @@ struct DashboardView: View {
                         HStack(alignment: .top, spacing: 6) {
                             LazyVStack(spacing: 6) {
                                 ForEach(leftCol) { moment in
-                                    NavigationLink(value: moment.id) {
+                                    Button {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                            appState.selectedMoment = moment
+                                        }
+                                    } label: {
                                         MomentsCardView(
                                             moment: moment,
                                             colorScheme: colorScheme,
@@ -101,7 +100,11 @@ struct DashboardView: View {
 
                             LazyVStack(spacing: 6) {
                                 ForEach(rightCol) { moment in
-                                    NavigationLink(value: moment.id) {
+                                    Button {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                            appState.selectedMoment = moment
+                                        }
+                                    } label: {
                                         MomentsCardView(
                                             moment: moment,
                                             colorScheme: colorScheme,
