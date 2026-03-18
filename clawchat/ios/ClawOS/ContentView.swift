@@ -12,33 +12,41 @@ struct ContentView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            Tab("会话", systemImage: "message.fill", value: 0) {
-                NavigationStack {
-                    HomeView()
+        ZStack {
+            TabView(selection: $selectedTab) {
+                Tab("会话", systemImage: "message.fill", value: 0) {
+                    NavigationStack {
+                        HomeView()
+                    }
                 }
+
+                Tab("AHA", systemImage: "square.grid.2x2.fill", value: 1) {
+                    NavigationStack {
+                        DashboardView()
+                    }
+                }
+
+                Tab("Agents", systemImage: "person.2.fill", value: 2) {
+                    NavigationStack {
+                        AgentProfileView()
+                    }
+                }
+            }
+            .tint(appState.currentVisualTheme.accent)
+            .background {
+                TabBarItemVerticalTuning(
+                    targetIndex: 1,
+                    imageVerticalOffset: 1,
+                    titleVerticalOffset: 1
+                )
+                .frame(width: 0, height: 0)
             }
 
-            Tab("AHA", systemImage: "square.grid.2x2.fill", value: 1) {
-                NavigationStack {
-                    DashboardView()
-                }
+            if let moment = appState.selectedMoment {
+                MomentDetailOverlay(moment: moment)
+                    .zIndex(100)
+                    .ignoresSafeArea()
             }
-
-            Tab("Agents", systemImage: "person.2.fill", value: 2) {
-                NavigationStack {
-                    AgentProfileView()
-                }
-            }
-        }
-        .tint(appState.currentVisualTheme.accent)
-        .background {
-            TabBarItemVerticalTuning(
-                targetIndex: 1,
-                imageVerticalOffset: 1,
-                titleVerticalOffset: 1
-            )
-            .frame(width: 0, height: 0)
         }
         .preferredColorScheme(isDarkMode ? .dark : nil)
         .onChange(of: effectiveColorScheme, initial: true) { _, newScheme in

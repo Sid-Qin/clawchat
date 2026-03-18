@@ -26,6 +26,7 @@ final class AppState {
 
     var selectedAgentId: String = ""
     var selectedGatewayId: String = ""
+    var selectedMoment: MockMoment?
     var selectedVisualThemeID: AppVisualThemeID = .eva00 {
         didSet {
             UserDefaults.standard.set(selectedVisualThemeID.rawValue, forKey: Self.themeKey)
@@ -208,6 +209,11 @@ final class AppState {
         if let index = sessions.firstIndex(where: { $0.id == id }) {
             sessions[index].isPinned.toggle()
         }
+    }
+
+    func updateAgentAvatar(id: String, avatar: String) {
+        guard let idx = agents.firstIndex(where: { $0.id == id }) else { return }
+        agents[idx].avatar = avatar
     }
 
     func markGatewayOffline(_ gatewayId: String) {

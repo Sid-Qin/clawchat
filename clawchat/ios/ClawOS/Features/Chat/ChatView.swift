@@ -25,7 +25,6 @@ struct ChatView: View {
     @State private var showSpeechPermissionAlert = false
     @State private var speechPermissionMessage = ""
     @State private var isVoiceFinalizing = false
-    @State private var finalRecordingPreviewText = ""
     @State private var voiceFinalizeTask: Task<Void, Never>?
     @State private var streamingDisplayMessageId: String?
     @State private var streamingDisplayText = ""
@@ -43,8 +42,20 @@ struct ChatView: View {
     private let maxAttachmentBytes = 5 * 1024 * 1024
     private let composerRowMinHeight: CGFloat = 24
     private let voiceComposerHeight: CGFloat = 64
-    private let recordingPreviewTailCharacterLimit = 40
-    private let recordingFadeWidth: CGFloat = 18
+    private let voiceActionButtonHeight: CGFloat = 36
+    private let voiceActionExpandedWidth: CGFloat = 82
+    private let voiceActionCollapsedWidth: CGFloat = 36
+    private let voiceActionAnimation: Animation = .snappy(
+        duration: 0.14,
+        extraBounce: 0.02
+    )
+
+    private enum VoiceActionVisualState: Equatable {
+        case idle
+        case starting
+        case recording
+        case finalizing
+    }
 
     private var agent: Agent? {
         appState.agent(for: session.agentId)
@@ -160,6 +171,9 @@ struct ChatView: View {
             isTrackingScrollAnchor = false
             hapticRigid.prepare()
             hapticSoft.prepare()
+            Task {
+                await speechService.prepareFastStartIfAuthorized()
+            }
         }
         .onChange(of: agent?.id) { _, _ in
             syncSelectedModel()
@@ -656,34 +670,34 @@ struct ChatView: View {
     }
 
     private var standardInputBar: some View {
-        VStack(spacing: 8) {
-            inputFieldArea
+        VStack(spacing: 0) {
+            if !isVoiceActive && !composerAttachments.isEmpty {
+                composerAttachmentStrip
+            }
 
-            HStack(spacing: 8) {
-                attachmentButton
-                modelMenu
-
-                Spacer()
-
-                if hasDraftContent {
-                    sendButton
-                } else if isVoiceFinalizing {
-                    Circle()
-                        .fill(currentTheme.accent)
-                        .frame(width: 36, height: 36)
-                        .overlay {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                } else if isVoiceRecording || isVoiceStarting {
-                    recordingIndicator
-                } else {
-                    speakButton
+            HStack(alignment: .center, spacing: 0) {
+                composerFieldSurface
+                
+                if isVoiceActive {
+                    voiceActionButton
+                        .padding(.trailing, 10)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 10)
+
+            if !isVoiceActive {
+                HStack(spacing: 8) {
+                    attachmentButton
+                    modelMenu
+                    Spacer()
+                    if hasDraftContent {
+                        sendButton
+                    } else {
+                        voiceActionButton
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+            }
         }
         .background(inputBarBackground)
     }
@@ -691,13 +705,10 @@ struct ChatView: View {
     private let voiceCancelDragThreshold: CGFloat = 50
 
     private var inputBarBackground: some View {
-        RoundedRectangle(cornerRadius: 24)
-            .fill(Color(.systemBackground))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(Color(.systemGray5), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.05), radius: 10, y: 3)
+        Color.clear
+            .glassEffect(.regular, in: .rect(cornerRadius: 24))
+            .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 4)
+            .shadow(color: .black.opacity(0.04), radius: 24, x: 0, y: 12)
     }
 
     private var attachmentButton: some View {
@@ -725,20 +736,10 @@ struct ChatView: View {
 
     // MARK: - Input Field
 
-    private var inputFieldArea: some View {
-        VStack(spacing: 10) {
-            if !composerAttachments.isEmpty {
-                composerAttachmentStrip
-            }
-
-            composerFieldSurface
-        }
-    }
-
     private var composerFieldSurface: some View {
         ZStack(alignment: .topLeading) {
             textField
-                .opacity(isVoiceActive ? 0 : 1)
+                .opacity(isVoiceCancelActive ? 0 : 1)
 
             if isVoiceActive {
                 activeRecordingField
@@ -818,44 +819,23 @@ struct ChatView: View {
         }
     }
 
-    private var recordingOverlay: some View {
-        HStack(spacing: 10) {
-            RecordingPreviewView(
-                speechService: speechService,
-                frozenText: finalRecordingPreviewText,
-                isFinalizing: isVoiceFinalizing,
-                minHeight: composerRowMinHeight,
-                tailCharacterLimit: recordingPreviewTailCharacterLimit,
-                fadeWidth: recordingFadeWidth
-            )
+    private var activeRecordingField: some View {
+        HStack(spacing: 6) {
+            Spacer(minLength: 0)
+            Image(systemName: "arrow.uturn.left.circle.fill")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Color.red.opacity(0.85))
+
+            Text("松开以取消")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Color.red.opacity(0.85))
 
             Spacer(minLength: 0)
         }
-        .frame(minHeight: composerRowMinHeight, alignment: .leading)
-    }
-
-    private var activeRecordingField: some View {
-        ZStack(alignment: .leading) {
-            HStack(spacing: 8) {
-                Spacer(minLength: 0)
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.red)
-
-                Text("松手取消")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.red)
-
-                Spacer(minLength: 0)
-            }
-            .opacity(isVoiceCancelActive ? 1 : 0)
-
-            recordingOverlay
-                .opacity(isVoiceCancelActive ? 0 : 1)
-        }
+        .opacity(isVoiceCancelActive ? 1 : 0)
         .padding(.horizontal, 16)
         .padding(.top, 14)
-        .padding(.bottom, 2)
+        .padding(.bottom, isVoiceActive ? 14 : 2)
         .frame(minHeight: composerRowMinHeight, alignment: .topLeading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.15), value: isVoiceCancelActive)
@@ -866,14 +846,17 @@ struct ChatView: View {
     }
 
     private var textField: some View {
-        TextField("输入文字或长按录音", text: $inputText, axis: .vertical)
+        let placeholder = isVoiceActive ? "正在聆听…" : "输入消息或长按录音..."
+        return TextField(placeholder, text: $inputText, axis: .vertical)
             .lineLimit(isVoiceActive ? 1...1 : 1...6)
             .textFieldStyle(.plain)
-            .font(.body)
+            .font(.system(size: 16, weight: .regular, design: .default))
+            .foregroundStyle(isVoiceActive ? AnyShapeStyle(Color.secondary) : AnyShapeStyle(Color.primary))
+            .tint(currentTheme.accent)
             .focused($isInputFocused)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 18)
             .padding(.top, 14)
-            .padding(.bottom, 2)
+            .padding(.bottom, isVoiceActive ? 14 : 4)
             .frame(minHeight: composerRowMinHeight, alignment: .topLeading)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -887,28 +870,26 @@ struct ChatView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         voiceFinalizeTask?.cancel()
-        finalRecordingPreviewText = finalText
 
-        isVoiceStarting = false
-        isVoiceRecording = false
-        isVoiceCancelActive = false
-        isVoiceFinalizing = !wasCancelled && !finalText.isEmpty
+        withAnimation(voiceActionAnimation) {
+            isVoiceStarting = false
+            isVoiceRecording = false
+            isVoiceCancelActive = false
+            isVoiceFinalizing = !wasCancelled && !finalText.isEmpty
+        }
 
         guard !wasCancelled, !finalText.isEmpty else {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(250))
-                finalRecordingPreviewText = ""
-            }
             return
         }
 
         voiceFinalizeTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(100))
+            try? await Task.sleep(for: .milliseconds(45))
             guard !Task.isCancelled else { return }
 
             inputText = finalText
-            isVoiceFinalizing = false
-            finalRecordingPreviewText = ""
+            withAnimation(voiceActionAnimation) {
+                isVoiceFinalizing = false
+            }
             voiceFinalizeTask = nil
         }
     }
@@ -1023,6 +1004,129 @@ struct ChatView: View {
         .buttonStyle(.plain)
     }
 
+    private var voiceActionState: VoiceActionVisualState {
+        if isVoiceFinalizing { return .finalizing }
+        if isVoiceRecording { return .recording }
+        if isVoiceStarting { return .starting }
+        return .idle
+    }
+
+    private var canStartVoiceFromTap: Bool {
+        ChatVoiceOverlayPolicy.allowsDirectSpeakTap(
+            isInputFocused: isInputFocused,
+            isVoiceRecording: isVoiceRecording,
+            isVoiceFinalizing: isVoiceFinalizing,
+            isWalkieTalkieRecording: isWalkieTalkieRecording
+        ) && !isVoiceStarting
+    }
+
+    private var voiceActionButton: some View {
+        let state = voiceActionState
+
+        return Button {
+            handleVoiceActionTap(for: state)
+        } label: {
+            ZStack {
+                HStack(spacing: 4) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("Speak")
+                        .font(.system(size: 14, weight: .bold))
+                }
+                .opacity(state == .idle ? 1 : 0)
+                .scaleEffect(state == .idle ? 1 : 0.93)
+                .blur(radius: state == .idle ? 0 : 1)
+
+                Image(systemName: voiceActionSymbolName(for: state))
+                    .font(.system(size: 14, weight: .bold))
+                    .opacity(state == .idle ? 0 : 1)
+                    .scaleEffect(state == .idle ? 0.72 : 1)
+            }
+            .foregroundStyle(Color.white)
+            .frame(
+                width: state == .idle ? voiceActionExpandedWidth : voiceActionCollapsedWidth,
+                height: voiceActionButtonHeight
+            )
+            .background(voiceActionBackground(for: state), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color.white.opacity(state == .idle ? 0.08 : 0.18), lineWidth: 0.8)
+            }
+            .shadow(
+                color: voiceActionShadowColor(for: state),
+                radius: state == .idle ? 0 : 8,
+                y: state == .idle ? 0 : 3
+            )
+            .scaleEffect(state == .starting ? 0.985 : 1)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .allowsHitTesting(voiceActionAllowsHitTesting(for: state))
+        .animation(voiceActionAnimation, value: state)
+    }
+
+    private func handleVoiceActionTap(for state: VoiceActionVisualState) {
+        switch state {
+        case .idle:
+            guard canStartVoiceFromTap else { return }
+            isVoiceStarting = true
+            hapticRigid.impactOccurred()
+            Task { await beginRecording() }
+        case .recording:
+            endRecording()
+        case .starting, .finalizing:
+            break
+        }
+    }
+
+    private func voiceActionAllowsHitTesting(for state: VoiceActionVisualState) -> Bool {
+        switch state {
+        case .idle:
+            canStartVoiceFromTap
+        case .recording:
+            true
+        case .starting, .finalizing:
+            false
+        }
+    }
+
+    private func voiceActionSymbolName(for state: VoiceActionVisualState) -> String {
+        switch state {
+        case .idle:
+            return "waveform"
+        case .starting:
+            return "stop.fill"
+        case .recording:
+            return "stop.fill"
+        case .finalizing:
+            return "checkmark"
+        }
+    }
+
+    private func voiceActionBackground(for state: VoiceActionVisualState) -> Color {
+        switch state {
+        case .idle:
+            return currentTheme.accent
+        case .starting:
+            return Color.red.opacity(0.92)
+        case .recording:
+            return .red
+        case .finalizing:
+            return currentTheme.accent
+        }
+    }
+
+    private func voiceActionShadowColor(for state: VoiceActionVisualState) -> Color {
+        switch state {
+        case .recording, .starting:
+            return Color.red.opacity(0.22)
+        case .finalizing:
+            return currentTheme.accent.opacity(0.18)
+        case .idle:
+            return .clear
+        }
+    }
+
     private func sendCurrentMessage() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         let attachments = composerAttachments
@@ -1046,37 +1150,6 @@ struct ChatView: View {
         composerAttachments.removeAll()
     }
 
-    private var speakButton: some View {
-        Button {
-            guard !isVoiceStarting, !isVoiceRecording else { return }
-            isVoiceStarting = true
-            hapticRigid.impactOccurred()
-            Task { await beginRecording() }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 13, weight: .bold))
-                Text("Speak")
-                    .font(.system(size: 14, weight: .bold))
-            }
-            .foregroundStyle(Color.white)
-            .padding(.horizontal, 16)
-            .frame(height: 36)
-            .background(currentTheme.accent, in: Capsule())
-            .contentShape(Capsule())
-        }
-        .allowsHitTesting(
-            ChatVoiceOverlayPolicy.allowsDirectSpeakTap(
-                isInputFocused: isInputFocused,
-                isVoiceRecording: isVoiceRecording,
-                isVoiceFinalizing: isVoiceFinalizing,
-                isWalkieTalkieRecording: isWalkieTalkieRecording
-            )
-            && !isVoiceStarting
-        )
-        .buttonStyle(.plain)
-    }
-
     private func beginRecording() async {
         guard isVoiceStarting, !isVoiceRecording else { return }
 
@@ -1088,18 +1161,21 @@ struct ChatView: View {
         voiceFinalizeTask?.cancel()
         voiceFinalizeTask = nil
         isVoiceFinalizing = false
-        finalRecordingPreviewText = ""
 
-        let permissions = await SpeechRecognitionService.requestPermissions()
+        let permissions = await SpeechRecognitionService.requestPermissionsIfNeeded()
 
         guard permissions.mic else {
-            isVoiceStarting = false
+            withAnimation(voiceActionAnimation) {
+                isVoiceStarting = false
+            }
             speechPermissionMessage = SpeechRecognitionService.SpeechError.microphoneDenied.localizedDescription
             showSpeechPermissionAlert = true
             return
         }
         guard permissions.speech else {
-            isVoiceStarting = false
+            withAnimation(voiceActionAnimation) {
+                isVoiceStarting = false
+            }
             speechPermissionMessage = SpeechRecognitionService.SpeechError.recognitionDenied.localizedDescription
             showSpeechPermissionAlert = true
             return
@@ -1107,30 +1183,18 @@ struct ChatView: View {
 
         do {
             try speechService.startRecording()
-            isVoiceStarting = false
-            isVoiceRecording = true
-            isVoiceCancelActive = false
+            withAnimation(voiceActionAnimation) {
+                isVoiceStarting = false
+                isVoiceRecording = true
+                isVoiceCancelActive = false
+            }
         } catch {
-            isVoiceStarting = false
+            withAnimation(voiceActionAnimation) {
+                isVoiceStarting = false
+            }
             speechPermissionMessage = error.localizedDescription
             showSpeechPermissionAlert = true
         }
-    }
-
-    private var recordingIndicator: some View {
-        Button {
-            endRecording()
-        } label: {
-            Circle()
-                .fill(Color.red)
-                .frame(width: 36, height: 36)
-                .overlay {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-        }
-        .buttonStyle(.plain)
     }
 
     private func syncSelectedModel() {
@@ -1233,79 +1297,6 @@ struct ChatView: View {
             return .audio
         }
         return .file
-    }
-}
-
-private struct RecordingPreviewView: View {
-    let speechService: SpeechRecognitionService
-    let frozenText: String
-    let isFinalizing: Bool
-    let minHeight: CGFloat
-    let tailCharacterLimit: Int
-    let fadeWidth: CGFloat
-
-    private var sourceText: String {
-        isFinalizing ? frozenText : speechService.transcribedText
-    }
-
-    private var trimmedText: String {
-        sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var displayText: String {
-        guard !trimmedText.isEmpty else { return "正在聆听…" }
-        guard trimmedText.count > tailCharacterLimit else { return trimmedText }
-        return String(trimmedText.suffix(tailCharacterLimit))
-    }
-
-    private var isPlaceholder: Bool {
-        trimmedText.isEmpty
-    }
-
-    var body: some View {
-        ZStack {
-            Text(displayText)
-                .font(.body)
-                .foregroundStyle(isPlaceholder ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .leading)
-                .padding(.horizontal, 8)
-                .mask {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.08),
-                            .init(color: .black, location: 0.92),
-                            .init(color: .clear, location: 1)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                }
-
-            HStack(spacing: 0) {
-                fadeEdge(startOpacity: 1, endOpacity: 0)
-                    .frame(width: fadeWidth)
-                Spacer(minLength: 0)
-                fadeEdge(startOpacity: 0, endOpacity: 1)
-                    .frame(width: fadeWidth)
-            }
-            .allowsHitTesting(false)
-        }
-        .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .leading)
-        .clipped()
-        .animation(.none, value: displayText)
-    }
-
-    private func fadeEdge(startOpacity: Double, endOpacity: Double) -> some View {
-        LinearGradient(
-            colors: [
-                Color(.systemBackground).opacity(startOpacity),
-                Color(.systemBackground).opacity(endOpacity)
-            ],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
     }
 }
 
@@ -1428,7 +1419,7 @@ private struct WalkieTalkieGestureView: UIViewRepresentable {
 
 // MARK: - Re-enable interactive pop gesture when back button is hidden
 
-private struct InteractivePopGestureEnabler: UIViewControllerRepresentable {
+struct InteractivePopGestureEnabler: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         InteractivePopController()
     }

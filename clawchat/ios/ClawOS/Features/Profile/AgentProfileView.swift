@@ -1,10 +1,8 @@
 import SwiftUI
-import PhotosUI
 
 struct AgentProfileView: View {
     @Environment(AppState.self) private var appState
     @State private var showAvatarPicker = false
-    @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var avatarRefreshToken = UUID()
 
     private var currentAgent: Agent? {
@@ -161,71 +159,69 @@ struct AgentProfileView: View {
             }
 
             Spacer()
-
-            Button { } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.caption)
-                    Text("添加状态")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-            }
-            .buttonStyle(.glass)
         }
         .offset(y: -28)
         .padding(.bottom, -12)
-        .photosPicker(
-            isPresented: $showAvatarPicker,
-            selection: $selectedPhotoItem,
-            matching: .images,
-            photoLibrary: .shared()
-        )
-        .onChange(of: selectedPhotoItem) { _, newItem in
-            guard let item = newItem, let agentId = currentAgent?.id else { return }
-            selectedPhotoItem = nil
-            Task {
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    let cropped = image.croppedToSquare(maxSize: 256)
-                    AvatarStorage.save(cropped, for: agentId)
+        .sheet(isPresented: $showAvatarPicker) {
+            if let agent = currentAgent {
+                AvatarPickerSheet(agentId: agent.id) {
                     avatarRefreshToken = UUID()
                 }
             }
         }
     }
 
+    private func statusBadge(_ status: AgentStatus) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(status.color)
+                .frame(width: 6, height: 6)
+                .shadow(color: status.color.opacity(0.5), radius: 2, x: 0, y: 0)
+            Text(status.label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(.systemBackground).opacity(0.6), in: Capsule())
+        .overlay(Capsule().stroke(Color(.separator).opacity(0.5), lineWidth: 0.5))
+    }
+
     private var nameSection: some View {
-        Menu {
-            ForEach(appState.agents) { agent in
-                Button {
-                    appState.selectedAgentId = agent.id
-                } label: {
-                    if agent.id == currentAgent?.id {
-                        Label(agent.name, systemImage: "checkmark")
-                    } else {
-                        Text(agent.name)
+        VStack(alignment: .leading, spacing: 10) {
+            Menu {
+                ForEach(appState.agents) { agent in
+                    Button {
+                        appState.selectedAgentId = agent.id
+                    } label: {
+                        if agent.id == currentAgent?.id {
+                            Label(agent.name, systemImage: "checkmark")
+                        } else {
+                            Text(agent.name)
+                        }
                     }
                 }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(currentAgent?.name ?? "Agent")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                }
             }
-        } label: {
-            HStack(spacing: 6) {
-                Text(currentAgent?.name ?? "Agent")
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize()
+            .id(currentAgent?.id)
+
+            if let agent = currentAgent {
+                statusBadge(agent.status)
             }
         }
         .padding(.bottom, AppTheme.Spacing.xl)
-        .id(currentAgent?.id)
     }
 
     private func agentAvatarImage(_ agent: Agent, size: CGFloat) -> some View {
@@ -253,79 +249,131 @@ struct AgentProfileView: View {
 
     private var infoCards: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("快速信息")
+            Text("概览")
                 .font(.headline)
                 .padding(.horizontal, 4)
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                quickInfoCard(
-                    title: "默认模型",
-                    value: currentAgent?.model ?? "未设定",
-                    icon: "cpu"
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                statCard(
+                    icon: "cpu",
+                    title: "模型",
+                    value: currentAgent?.model ?? "未设定"
                 )
-                quickInfoCard(
-                    title: "所在网关",
-                    value: appState.gateways.first(where: { $0.id == currentAgent?.gatewayId })?.name ?? "未连接",
-                    icon: "point.3.connected.trianglepath.dotted"
+                statCard(
+                    icon: "point.3.connected.trianglepath.dotted",
+                    title: "网关",
+                    value: appState.gateways.first(where: { $0.id == currentAgent?.gatewayId })?.name ?? "未连接"
+                )
+                statCard(
+                    icon: "puzzlepiece.extension",
+                    title: "Skills",
+                    value: {
+                        let enabled = appState.skills.filter(\.isEnabled).count
+                        let total = appState.skills.count
+                        return total > 0 ? "\(enabled)/\(total) 已启用" : "暂无"
+                    }()
+                )
+                statCard(
+                    icon: "flame",
+                    title: "Token 消耗",
+                    value: formatTokenCount(currentAgent?.totalTokens ?? 0)
                 )
             }
 
-            skillsCard
             themeCard
+            cronJobsCard
         }
     }
 
-    private func quickInfoCard(title: String, value: String, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var cronJobsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
-                Image(systemName: icon)
-                Text(title)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            Text(value)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
-    }
-
-    private var skillsCard: some View {
-        let enabledCount = appState.skills.filter(\.isEnabled).count
-        let totalCount = appState.skills.count
-
-        return HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("已启用 Skills")
+                Image(systemName: "clock.arrow.2.circlepath")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(currentTheme.accent)
+                Text("定时任务 (Cron Jobs)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(totalCount > 0 ? "\(enabledCount) / \(totalCount) 个已启用" : "暂无")
+            }
+
+            VStack(spacing: 14) {
+                cronJobRow(time: "每天 08:00", description: "获取并总结今日 AI 行业新闻", isActive: true)
+                cronJobRow(time: "每小时", description: "检查 GitHub 仓库的新 Issue", isActive: true)
+                cronJobRow(time: "每周五 18:00", description: "生成本周工作周报并发送邮件", isActive: false)
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+    }
+
+    private func cronJobRow(time: String, description: String, isActive: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(time)
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .foregroundStyle(isActive ? currentTheme.accent : .secondary)
+                .frame(width: 85, alignment: .leading)
+
+            Text(description)
+                .font(.subheadline)
+                .foregroundStyle(isActive ? .primary : .secondary)
+                .lineLimit(2)
+
+            Spacer(minLength: 8)
+
+            Toggle("", isOn: .constant(isActive))
+                .labelsHidden()
+                .scaleEffect(0.7)
+                .frame(width: 30)
+                .tint(currentTheme.accent)
+        }
+    }
+
+    private func statCard(icon: String, title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(currentTheme.accent)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(value)
                     .font(.subheadline)
                     .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-            Spacer()
-            Image(systemName: "puzzlepiece.extension")
-                .font(.system(size: 16))
-                .foregroundStyle(.tertiary)
         }
-        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+    }
+
+    private func formatTokenCount(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000)
+        } else if count >= 1_000 {
+            return String(format: "%.1fK", Double(count) / 1_000)
+        } else if count > 0 {
+            return "\(count)"
+        }
+        return "—"
     }
 
     private var themeCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "text.quote")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(currentTheme.accent)
                 Text("系统设定")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
 
             Text(currentAgent?.theme ?? "You are a helpful AI assistant.")
                 .font(.subheadline)
@@ -334,7 +382,233 @@ struct AgentProfileView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
+        .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+    }
+}
+
+// MARK: - Avatar Picker Sheet
+
+import PhotosUI
+
+struct AvatarPickerSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    let agentId: String
+    var onChanged: () -> Void = {}
+
+    @State private var pendingAsset: String?
+    @State private var pendingCustomImage: UIImage?
+    @State private var showPhotosPicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+
+    private let selectionHaptic = UISelectionFeedbackGenerator()
+    private let confirmHaptic = UIImpactFeedbackGenerator(style: .medium)
+
+    private var currentAgent: Agent? {
+        appState.agents.first { $0.id == agentId }
+    }
+
+    private var accent: Color { appState.currentVisualTheme.accent }
+
+    private var hasPendingChange: Bool {
+        pendingAsset != nil || pendingCustomImage != nil
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        currentPreview
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("官方头像")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 4)
+
+                            builtInGrid
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                }
+
+                photoLibraryButton
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 16)
+            }
+            .navigationTitle("选择头像")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { commitAndDismiss() }
+                        .fontWeight(.semibold)
+                        .disabled(!hasPendingChange)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .photosPicker(
+            isPresented: $showPhotosPicker,
+            selection: $selectedPhotoItem,
+            matching: .images,
+            photoLibrary: .shared()
+        )
+        .onChange(of: selectedPhotoItem) { _, newItem in
+            guard let item = newItem else { return }
+            selectedPhotoItem = nil
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    let cropped = image.croppedToSquare(maxSize: 256)
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                        pendingCustomImage = cropped
+                        pendingAsset = nil
+                    }
+                    selectionHaptic.selectionChanged()
+                }
+            }
+        }
+        .onAppear {
+            selectionHaptic.prepare()
+            confirmHaptic.prepare()
+        }
+    }
+
+    // MARK: - Commit
+
+    private func commitAndDismiss() {
+        if let customImage = pendingCustomImage {
+            AvatarStorage.save(customImage, for: agentId)
+            appState.updateAgentAvatar(id: agentId, avatar: "")
+        } else if let asset = pendingAsset {
+            AvatarStorage.remove(for: agentId)
+            appState.updateAgentAvatar(id: agentId, avatar: asset)
+        }
+        confirmHaptic.impactOccurred(intensity: 0.8)
+        onChanged()
+        dismiss()
+    }
+
+    // MARK: - Preview
+
+    private var currentPreview: some View {
+        VStack(spacing: 8) {
+            previewImage
+                .frame(width: 80, height: 80)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(accent.opacity(0.4), lineWidth: 2))
+                .animation(.spring(response: 0.35, dampingFraction: 0.75), value: pendingAsset)
+                .animation(.spring(response: 0.35, dampingFraction: 0.75), value: pendingCustomImage == nil)
+
+            Text(currentAgent?.name ?? "Agent")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var previewImage: some View {
+        if let customImage = pendingCustomImage {
+            Image(uiImage: customImage)
+                .resizable()
+                .scaledToFill()
+        } else if let asset = pendingAsset, UIImage(named: asset) != nil {
+            Image(asset)
+                .resizable()
+                .scaledToFill()
+        } else if let custom = AvatarStorage.load(for: agentId) {
+            Image(uiImage: custom)
+                .resizable()
+                .scaledToFill()
+        } else if let agent = currentAgent, !agent.avatar.isEmpty,
+                  UIImage(named: agent.avatar) != nil {
+            Image(agent.avatar)
+                .resizable()
+                .scaledToFill()
+        } else {
+            Image(systemName: "person.crop.circle.fill")
+                .resizable()
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Grid
+
+    private let builtInAvatars = [
+        "avatar_shinji", "avatar_rei", "avatar_asuka",
+        "avatar_kaworu", "avatar_mari", "avatar_misato",
+        "avatar_eva01", "avatar_eva00", "avatar_eva02",
+        "avatar_ritsuko"
+    ]
+
+    private var builtInGrid: some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 5),
+            spacing: 14
+        ) {
+            ForEach(builtInAvatars, id: \.self) { name in
+                builtInCell(name)
+            }
+        }
+    }
+
+    private func builtInCell(_ name: String) -> some View {
+        let isActive = pendingAsset == name && pendingCustomImage == nil
+
+        return Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                pendingAsset = name
+                pendingCustomImage = nil
+            }
+            selectionHaptic.selectionChanged()
+        } label: {
+            Group {
+                if UIImage(named: name) != nil {
+                    Image(name)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(width: 56, height: 56)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(accent, lineWidth: isActive ? 2.5 : 0)
+                    .frame(width: 60, height: 60)
+                    .opacity(isActive ? 1 : 0)
+            )
+            .animation(.easeInOut(duration: 0.2), value: isActive)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Photo Library
+
+    private var photoLibraryButton: some View {
+        Button {
+            showPhotosPicker = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "photo.on.rectangle.angled")
+                    .font(.system(size: 16, weight: .medium))
+                Text("从相册选择")
+                    .font(.system(size: 16, weight: .medium))
+            }
+            .foregroundStyle(.primary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .glassEffect(.regular, in: .capsule)
+        }
+        .buttonStyle(.plain)
     }
 }

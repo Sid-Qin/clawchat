@@ -1,147 +1,242 @@
 import SwiftUI
 
+// MARK: - Settings View
+
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("isDarkMode") private var isDarkMode = false
-    @State private var skillsWatchEnabled = true
-    
+    @State private var showLoginSheet = false
+    @State private var showPrivacyPolicy = false
+    @State private var showTermsOfService = false
+
+    private var theme: AppVisualTheme { appState.currentVisualTheme }
 
     private var currentAgent: Agent? {
         appState.selectedAgent
     }
 
+    private let bottomFadeHeight: CGFloat = 60
+
     var body: some View {
-        Form {
-            // MARK: - Profile Header
-            if let agent = currentAgent {
-                Section {
-                    HStack(spacing: 16) {
-                        agentAvatarView(agent.avatar, size: 56)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(agent.name)
-                                .font(.headline)
-                            Text("@\(agent.id)_agent")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
+        ScrollView(showsIndicators: false) {
+            LazyVStack(alignment: .leading, spacing: 28) {
+                profileCard
+                sectionBlock(title: "通用设置", cells: generalCells)
+                sectionBlock(title: "ClawChat 连接", cells: connectionCells)
+                sectionBlock(title: "法律与隐私", cells: legalCells)
             }
-
-            // MARK: - General
-            Section(header: Text("通用设置")) {
-                NavigationLink {
-                    ThemeSelectionView()
-                        .environment(appState)
-                } label: {
-                    settingRow(icon: "circle.lefthalf.filled", title: "视觉主题", value: appState.currentVisualTheme.displayName)
-                }
-                
-                settingRow(icon: "cpu", title: "默认大语言模型", value: currentAgent?.model ?? "未连接")
-                
-                Toggle(isOn: $isDarkMode) {
-                    settingRow(icon: "moon", title: "暗色模式", value: nil)
-                }
-                .tint(appState.currentVisualTheme.accent)
-            }
-
-            // MARK: - Skills & Capabilities
-            Section(header: Text("技能与能力")) {
-                NavigationLink {
-                    Text("Skills Settings")
-                } label: {
-                    settingRow(icon: "puzzlepiece.extension", title: "Skills 设定", value: "\(appState.skills.filter(\.isEnabled).count) 个已启用")
-                }
-                
-                Toggle(isOn: $skillsWatchEnabled) {
-                    settingRow(icon: "arrow.triangle.2.circlepath", title: "Skills 自动重载 (Watch)", value: nil)
-                }
-                .tint(appState.currentVisualTheme.accent)
-            }
-
-            // MARK: - Core Files
-            Section(header: Text("核心文件配置")) {
-                fileNavRow(icon: "doc.text", title: "soul.md")
-                fileNavRow(icon: "person.text.rectangle", title: "agent.md")
-                fileNavRow(icon: "person.crop.square", title: "identity.md")
-                fileNavRow(icon: "hammer", title: "tools.json")
-                fileNavRow(icon: "person.2", title: "users.json")
-            }
-
-            // MARK: - Connection
-            Section(header: Text("ClawChat 连接")) {
-                HStack(spacing: 12) {
-                    Image(systemName: connectionIcon)
-                        .font(.system(size: 18, weight: .regular))
-                        .foregroundStyle(connectionColor)
-                        .frame(width: 24)
-                    Text("连接状态")
-                        .font(.system(size: 17))
-                    Spacer()
-                    Text(connectionLabel)
-                        .font(.subheadline)
-                        .foregroundStyle(connectionColor)
-                }
-
-                if appState.clawChatManager.isPaired {
-                    Button(role: .destructive) {
-                        Task { await appState.clawChatManager.unpair() }
-                    } label: {
-                        settingRow(icon: "link.badge.plus", title: "取消配对", value: nil)
-                    }
-                } else {
-                    Button {
-                        withAnimation { appState.showPairing = true }
-                    } label: {
-                        settingRow(icon: "antenna.radiowaves.left.and.right", title: "配对 Gateway", value: nil)
-                    }
-                }
-            }
-
-            // MARK: - Memory
-            Section(header: Text("记忆与上下文")) {
-                NavigationLink {
-                    Text("Memory Management")
-                } label: {
-                    settingRow(icon: "brain.head.profile", title: "长期记忆管理", value: nil)
-                }
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, bottomFadeHeight + 20)
         }
-        .navigationTitle("设置")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
-        .scrollContentBackground(.hidden)
+        .overlay(alignment: .bottom) { bottomFade }
         .background {
             LinearGradient(
-                colors: [appState.currentVisualTheme.pageGradientTop, appState.currentVisualTheme.pageGradientBottom],
+                colors: [theme.pageGradientTop, theme.pageGradientBottom],
                 startPoint: .top,
                 endPoint: .bottom
             )
             .ignoresSafeArea()
         }
-    }
-
-    // MARK: - Avatar
-
-    private func agentAvatarView(_ avatar: String, size: CGFloat) -> some View {
-        Group {
-            if !avatar.isEmpty, UIImage(named: avatar) != nil {
-                Image(avatar)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
-                    .foregroundStyle(.secondary)
+        .navigationTitle("设置")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(theme.accent)
+                }
             }
         }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
+        .navigationBarBackButtonHidden(true)
+        .background(InteractivePopGestureEnabler())
+        .sheet(isPresented: $showLoginSheet) {
+            LoginView { showLoginSheet = false }
+                .environment(appState)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
+                .presentationBackground(Color(.systemBackground))
+        }
+        .sheet(isPresented: $showPrivacyPolicy) {
+            NavigationStack {
+                ScrollView {
+                    Text("这里是隐私政策的具体内容...")
+                        .padding()
+                }
+                .navigationTitle("隐私政策")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("完成") { showPrivacyPolicy = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showTermsOfService) {
+            NavigationStack {
+                ScrollView {
+                    Text("这里是服务条款的具体内容...")
+                        .padding()
+                }
+                .navigationTitle("服务条款")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("完成") { showTermsOfService = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 
-    // MARK: - Connection helpers
+    // MARK: - Profile Card
+
+    private var profileCard: some View {
+        Button { showLoginSheet = true } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .frame(width: 52, height: 52)
+                    .foregroundStyle(theme.accent.opacity(0.6))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("登录 / 注册")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(Color(.label))
+                    Text("登录后可同步数据和 Agent 配置")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(.secondaryLabel))
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color(.tertiaryLabel))
+            }
+            .padding(16)
+            .background(cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Section Block
+
+    private func sectionBlock(title: String, cells: [SettingsCellDescriptor]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(Color(.label))
+                .padding(.leading, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+
+            ForEach(Array(cells.enumerated()), id: \.element.id) { index, cell in
+                if index > 0 {
+                    Divider().padding(.leading, 52)
+                }
+                cellRow(cell)
+            }
+
+            Spacer().frame(height: 4)
+        }
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    // MARK: - Cell Row
+
+    @ViewBuilder
+    private func cellRow(_ cell: SettingsCellDescriptor) -> some View {
+        switch cell.kind {
+        case .navigation(let destination):
+            NavigationLink { destination } label: {
+                cellContent(cell)
+            }
+        case .toggle(let binding):
+            HStack(spacing: 0) {
+                cellContent(cell, showsRightSpace: false)
+                Toggle("", isOn: binding)
+                    .labelsHidden()
+                    .tint(theme.accent)
+                    .padding(.trailing, 16)
+            }
+        case .button(let action):
+            Button(action: action) {
+                cellContent(cell)
+            }
+            .buttonStyle(.plain)
+        case .destructiveButton(let action):
+            Button(role: .destructive, action: action) {
+                cellContent(cell)
+                    .foregroundStyle(.red)
+            }
+            .buttonStyle(.plain)
+        case .info:
+            cellContent(cell)
+        }
+    }
+
+    private func cellContent(_ cell: SettingsCellDescriptor, showsRightSpace: Bool = true) -> some View {
+        HStack(spacing: 16) {
+            Image(systemName: cell.icon)
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(theme.accent)
+                .frame(width: 24, height: 24)
+
+            Text(cell.title)
+                .font(.system(size: 16))
+                .foregroundStyle(Color(.label))
+
+            Spacer()
+
+            if let value = cell.value {
+                Text(value)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(.secondaryLabel))
+            }
+
+            if cell.showsExternalLink {
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color(.tertiaryLabel))
+            }
+
+            if case .navigation = cell.kind {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color(.tertiaryLabel))
+            }
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, showsRightSpace ? 16 : 0)
+        .padding(.vertical, 14)
+    }
+
+    // MARK: - Card Background
+
+    private var cardBackground: some ShapeStyle {
+        Color(.secondarySystemGroupedBackground)
+    }
+
+    // MARK: - Bottom Fade
+
+    private var bottomFade: some View {
+        LinearGradient(
+            colors: [.clear, theme.pageGradientBottom],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: bottomFadeHeight)
+        .allowsHitTesting(false)
+    }
+
+    // MARK: - Connection Helpers
 
     private var connectionIcon: String {
         switch appState.clawChatManager.linkState {
@@ -172,32 +267,89 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Cell Data
 
-    private func settingRow(icon: String, title: String, value: String?) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
-            Text(title)
-                .foregroundStyle(.primary)
-                .font(.system(size: 17))
-            Spacer()
-            if let value = value {
-                Text(value)
-                    .foregroundStyle(.secondary)
-                    .font(.subheadline)
-            }
-        }
+    private var generalCells: [SettingsCellDescriptor] {
+        [
+            SettingsCellDescriptor(
+                id: "theme", icon: "circle.lefthalf.filled", title: "视觉主题",
+                value: theme.displayName,
+                kind: .navigation(AnyView(ThemeSelectionView().environment(appState)))
+            ),
+            SettingsCellDescriptor(
+                id: "model", icon: "cpu", title: "默认大语言模型",
+                value: currentAgent?.model ?? "未连接",
+                kind: .info
+            ),
+            SettingsCellDescriptor(
+                id: "darkmode", icon: "moon", title: "暗色模式",
+                kind: .toggle($isDarkMode)
+            ),
+        ]
     }
 
-    private func fileNavRow(icon: String, title: String) -> some View {
-        NavigationLink {
-            Text("Editing \(title)")
-        } label: {
-            settingRow(icon: icon, title: title, value: nil)
+    private var connectionCells: [SettingsCellDescriptor] {
+        var cells: [SettingsCellDescriptor] = [
+            SettingsCellDescriptor(
+                id: "conn_status", icon: connectionIcon, title: "连接状态",
+                value: connectionLabel,
+                iconColor: connectionColor,
+                kind: .info
+            )
+        ]
+
+        if appState.clawChatManager.isPaired {
+            cells.append(SettingsCellDescriptor(
+                id: "unpair", icon: "link.badge.plus", title: "取消配对",
+                kind: .destructiveButton { Task { await appState.clawChatManager.unpair() } }
+            ))
+        } else {
+            cells.append(SettingsCellDescriptor(
+                id: "pair", icon: "antenna.radiowaves.left.and.right", title: "配对 Gateway",
+                kind: .button { withAnimation { appState.showPairing = true } }
+            ))
         }
+
+        return cells
+    }
+
+    private var legalCells: [SettingsCellDescriptor] {
+        [
+            SettingsCellDescriptor(
+                id: "privacy", icon: "hand.raised", title: "隐私政策",
+                showsExternalLink: true,
+                kind: .button { showPrivacyPolicy = true }
+            ),
+            SettingsCellDescriptor(
+                id: "tos", icon: "doc.text", title: "服务条款",
+                showsExternalLink: true,
+                kind: .button { showTermsOfService = true }
+            ),
+            SettingsCellDescriptor(
+                id: "memory", icon: "brain.head.profile", title: "长期记忆管理",
+                kind: .navigation(AnyView(Text("Memory Management")))
+            ),
+        ]
+    }
+}
+
+// MARK: - Cell Descriptor
+
+private struct SettingsCellDescriptor: Identifiable {
+    let id: String
+    let icon: String
+    let title: String
+    var value: String? = nil
+    var iconColor: Color? = nil
+    var showsExternalLink: Bool = false
+    var kind: CellKind = .info
+
+    enum CellKind {
+        case navigation(AnyView)
+        case toggle(Binding<Bool>)
+        case button(() -> Void)
+        case destructiveButton(() -> Void)
+        case info
     }
 }
 
