@@ -50,7 +50,7 @@ struct AgentEditorView: View {
                 .textFieldStyle(.plain)
                 .padding(12)
                 .frame(height: 48)
-                .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.md))
+                .adaptiveGlass(in: .rect(cornerRadius: AppTheme.Radius.md))
         }
     }
 
@@ -82,7 +82,7 @@ struct AgentEditorView: View {
                 }
                 .padding(.horizontal, 12)
                 .frame(height: 48)
-                .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.md))
+                .adaptiveGlass(in: .rect(cornerRadius: AppTheme.Radius.md))
             }
         }
     }
@@ -110,7 +110,7 @@ struct AgentEditorView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
         }
-        .buttonStyle(.glass)
+        .adaptiveGlassButtonStyle()
         .tint(.primary)
         .disabled(name.isEmpty)
     }

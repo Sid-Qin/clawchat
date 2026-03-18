@@ -66,9 +66,7 @@ final class SpeechRecognitionService {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        if #available(iOS 17, *) {
-            request.requiresOnDeviceRecognition = speechRecognizer.supportsOnDeviceRecognition
-        }
+        request.requiresOnDeviceRecognition = speechRecognizer.supportsOnDeviceRecognition
         recognitionRequest = request
 
         transcribedText = ""

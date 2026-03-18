@@ -15,7 +15,7 @@ struct ModelSwitcherBar: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .adaptiveGlass(in: .capsule, interactive: true)
         }
         .buttonStyle(.plain)
     }

@@ -173,7 +173,7 @@ struct AgentProfileView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             }
-            .buttonStyle(.glass)
+            .adaptiveGlassButtonStyle()
         }
         .offset(y: -28)
         .padding(.bottom, -12)
@@ -293,7 +293,7 @@ struct AgentProfileView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+        .adaptiveGlass(in: .rect(cornerRadius: AppTheme.Radius.lg))
     }
 
     private var skillsCard: some View {
@@ -315,7 +315,7 @@ struct AgentProfileView: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(16)
-        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+        .adaptiveGlass(in: .rect(cornerRadius: AppTheme.Radius.lg))
     }
 
     private var themeCard: some View {
@@ -335,6 +335,6 @@ struct AgentProfileView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+        .adaptiveGlass(in: .rect(cornerRadius: AppTheme.Radius.lg))
     }
 }

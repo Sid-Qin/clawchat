@@ -80,7 +80,7 @@ struct AgentTrackView: View {
         }
         .frame(width: AgentTrackMetrics.trackWidth)
         .frame(height: isExpanded ? nil : AgentTrackMetrics.collapsedHeight)
-        .glassEffect(.regular, in: isExpanded ? AnyShape(.capsule) : AnyShape(.circle))
+        .adaptiveGlassAnyShape(isExpanded ? AnyShape(.capsule) : AnyShape(.circle))
         .shadow(color: .black.opacity(isExpanded ? 0.1 : 0.05), radius: 16, y: isExpanded ? -4 : 0)
         .sensoryFeedback(.impact(flexibility: .soft), trigger: isExpanded)
         .sheet(isPresented: $showAddAgent) {
@@ -186,7 +186,7 @@ struct AgentTrackView: View {
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(isConnected ? .primary : .secondary)
                 .frame(width: AgentTrackMetrics.controlDiameter, height: AgentTrackMetrics.controlDiameter)
-                .glassEffect(.regular, in: .circle)
+                .adaptiveGlass(in: .circle)
             
             Circle()
                 .fill(gatewayStatusColor)
@@ -271,7 +271,7 @@ struct AgentTrackView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
                 .frame(width: AgentTrackMetrics.addButtonDiameter, height: AgentTrackMetrics.addButtonDiameter)
-                .glassEffect(.regular, in: .circle)
+                .adaptiveGlass(in: .circle)
         }
         .buttonStyle(.plain)
     }

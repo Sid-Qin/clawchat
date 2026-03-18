@@ -720,7 +720,7 @@ struct ChatView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular, in: .circle)
+        .adaptiveGlass(in: .circle)
     }
 
     // MARK: - Input Field
@@ -940,10 +940,10 @@ struct ChatView: View {
             } label: {
                 modelChip(showChevron: true)
             }
-            .glassEffect(.regular, in: .capsule)
+            .adaptiveGlass(in: .capsule)
         } else {
             modelChip(showChevron: false)
-                .glassEffect(.regular, in: .capsule)
+                .adaptiveGlass(in: .capsule)
         }
     }
 

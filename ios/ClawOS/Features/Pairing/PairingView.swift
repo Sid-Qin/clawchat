@@ -85,7 +85,7 @@ struct PairingCardView: View {
             RoundedRectangle(cornerRadius: 36, style: .continuous)
                 .fill(.regularMaterial)
         )
-        .glassEffect(.regular, in: .rect(cornerRadius: 36))
+        .adaptiveGlass(in: .rect(cornerRadius: 36))
         .overlay(
             RoundedRectangle(cornerRadius: 36, style: .continuous)
                 .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
