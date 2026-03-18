@@ -5,27 +5,30 @@ enum HomeSidebarMetrics {
     static let overshootPadding: CGFloat = 16
 
     static let avatarDiameter: CGFloat = 40
-    static let controlDiameter: CGFloat = avatarDiameter
-    static let addButtonDiameter: CGFloat = avatarDiameter
+    static let controlDiameter: CGFloat = 36
+    static let addButtonDiameter: CGFloat = 36
     static let statusDotDiameter: CGFloat = 10
 
-    static let singleColumnWidth: CGFloat = 66
-    static let doubleColumnWidth: CGFloat = 136
-    static let secondColumnGestureTravel: CGFloat = 130
-    static let secondColumnActivationProgress: CGFloat = 0.85
+    static let singleColumnWidth: CGFloat = 62
+    static let secondColumnGestureTravel: CGFloat = 180
 
     static let gridSpacing: CGFloat = 10
-    static let gridPadding: CGFloat = 13
+    static let gridPadding: CGFloat = 3
+
+    static let fullScreenAvatarSize: CGFloat = 52
+    static let fullScreenGridColumns = 4
+    static let fullScreenGridSpacing: CGFloat = 16
+
+    static var screenWidth: CGFloat { UIScreen.main.bounds.width }
 
     static func columns(for level: Int) -> Int {
-        level >= 2 ? 2 : 1
+        level >= 2 ? fullScreenGridColumns : 1
     }
 }
 
 struct AgentSidebarView: View {
     @Environment(AppState.self) private var appState
     @State private var showAddAgent = false
-    var expansionLevel: Int = 1
     var onDismiss: () -> Void = {}
 
     private var isConnected: Bool {
@@ -36,84 +39,40 @@ struct AgentSidebarView: View {
         !appState.currentGatewayAgents.isEmpty
     }
 
-    private var columnCount: Int {
-        HomeSidebarMetrics.columns(for: expansionLevel)
-    }
-
-    private var showsLabels: Bool {
-        expansionLevel >= 2
-    }
+    private var accent: Color { appState.currentVisualTheme.accent }
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 14) {
+                VStack(spacing: 10) {
                     gatewayButton
-                        .padding(.top, 24)
-                        .padding(.bottom, hasAgents ? 0 : 24)
+                        .padding(.top, 16)
 
                     if hasAgents {
-                        pillDivider
-
-                        agentGrid
-
-                        pillDivider
+                        ForEach(appState.currentGatewayAgents) { agent in
+                            narrowAgentCell(agent)
+                        }
 
                         addButton
-                            .padding(.bottom, 24)
+                            .padding(.bottom, 16)
                     }
                 }
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: hasAgents)
-                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 6)
             }
             .mask(
-                RoundedRectangle(cornerRadius: 33, style: .continuous)
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
             )
         }
         .frame(maxHeight: .infinity)
-        .glassEffect(.regular, in: .rect(cornerRadius: 33))
+        .glassEffect(.regular, in: .rect(cornerRadius: 28))
+        .shadow(color: .black.opacity(0.10), radius: 12, x: 0, y: 4)
         .sheet(isPresented: $showAddAgent) {
             AgentEditorView()
                 .environment(appState)
         }
     }
 
-    // MARK: - Agent Grid
-
-    private var agentGrid: some View {
-        let agents = appState.currentGatewayAgents
-        let cols = columnCount
-        let rows = stride(from: 0, to: agents.count, by: cols).map { startIndex in
-            Array(agents[startIndex..<min(startIndex + cols, agents.count)])
-        }
-
-        return VStack(spacing: HomeSidebarMetrics.gridSpacing) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                HStack(spacing: HomeSidebarMetrics.gridSpacing) {
-                    ForEach(row) { agent in
-                        agentCell(agent)
-                    }
-
-                    if row.count < cols {
-                        ForEach(0..<(cols - row.count), id: \.self) { _ in
-                            Color.clear
-                                .frame(width: HomeSidebarMetrics.avatarDiameter,
-                                       height: HomeSidebarMetrics.avatarDiameter)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, HomeSidebarMetrics.gridPadding)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.selectedGatewayId)
-        .animation(nil, value: expansionLevel)
-    }
-
-    // MARK: - Agent Cell
-
-    private var accent: Color { appState.currentVisualTheme.accent }
-
-    private func agentCell(_ agent: Agent) -> some View {
+    private func narrowAgentCell(_ agent: Agent) -> some View {
         let isSelected = appState.selectedAgentId == agent.id
         return Button {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -123,35 +82,26 @@ struct AgentSidebarView: View {
                 onDismiss()
             }
         } label: {
-            VStack(spacing: showsLabels ? 4 : 0) {
-                ZStack {
-                    agentAvatarView(agent, size: HomeSidebarMetrics.avatarDiameter)
-                        .scaleEffect(isSelected ? 1.15 : 1.0)
+            ZStack {
+                agentAvatarView(agent, size: HomeSidebarMetrics.avatarDiameter)
+                    .scaleEffect(isSelected ? 1.15 : 1.0)
 
-                    Circle()
-                        .stroke(accent, lineWidth: isSelected ? 2.5 : 0)
-                        .frame(width: HomeSidebarMetrics.avatarDiameter + 6,
-                               height: HomeSidebarMetrics.avatarDiameter + 6)
-                        .opacity(isSelected ? 1 : 0)
-                        .shadow(color: accent.opacity(0.35), radius: isSelected ? 4 : 0, y: 0)
-                }
-                .animation(.spring(response: 0.35, dampingFraction: 0.65), value: isSelected)
-
-                if showsLabels {
-                    Text(agent.name.prefix(4))
-                        .font(.system(size: 10, weight: isSelected ? .bold : .medium))
-                        .foregroundStyle(isSelected ? accent : .secondary)
-                        .lineLimit(1)
-                }
+                Circle()
+                    .stroke(accent, lineWidth: isSelected ? 2.5 : 0)
+                    .frame(width: HomeSidebarMetrics.avatarDiameter + 6,
+                           height: HomeSidebarMetrics.avatarDiameter + 6)
+                    .opacity(isSelected ? 1 : 0)
+                    .shadow(color: accent.opacity(0.35), radius: isSelected ? 4 : 0)
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.65), value: isSelected)
             .frame(width: HomeSidebarMetrics.avatarDiameter + 6,
-                   height: showsLabels ? HomeSidebarMetrics.avatarDiameter + 22 : HomeSidebarMetrics.avatarDiameter + 6)
+                   height: HomeSidebarMetrics.avatarDiameter + 6)
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: isSelected)
     }
 
-    // MARK: - Gateway
+    // MARK: - Gateway Button
 
     private var gatewayIcon: String {
         if !isConnected { return "antenna.radiowaves.left.and.right.slash" }
@@ -227,16 +177,7 @@ struct AgentSidebarView: View {
         }
     }
 
-    // MARK: - Divider
-
-    private var pillDivider: some View {
-        Capsule()
-            .fill(.quaternary)
-            .frame(width: 24, height: 1)
-            .padding(.vertical, 2)
-    }
-
-    // MARK: - Avatar
+    // MARK: - Shared Components
 
     private func agentAvatarView(_ agent: Agent, size: CGFloat) -> some View {
         Group {
@@ -257,8 +198,6 @@ struct AgentSidebarView: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
     }
-
-    // MARK: - Add
 
     private var addButton: some View {
         Button {

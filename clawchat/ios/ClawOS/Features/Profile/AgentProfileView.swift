@@ -4,6 +4,11 @@ struct AgentProfileView: View {
     @Environment(AppState.self) private var appState
     @State private var showAvatarPicker = false
     @State private var avatarRefreshToken = UUID()
+    @State private var isAdvancedExpanded = false
+    @State private var showAgentSwitcher = false
+    @State private var agentNameButtonHeight: CGFloat = 0
+
+    private let maxVisibleAgentSwitcherRows = 5
 
     private var currentAgent: Agent? {
         appState.selectedAgent
@@ -112,56 +117,114 @@ struct AgentProfileView: View {
     // MARK: - Profile Content
 
     private var profileContent: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            avatarRow
-            nameSection
-            infoCards
+        ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 0) {
+                headerRow
+                infoCards
+            }
+
+            if showAgentSwitcher {
+                Color.black.opacity(0.001)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .onTapGesture {
+                        showAgentSwitcher = false
+                    }
+
+                agentSwitcherCard(selectedAgentId: currentAgent?.id ?? "")
+                    .padding(.top, headerSwitcherTopOffset)
+            }
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
         .padding(.bottom, 100)
     }
 
-    private var avatarRow: some View {
-        HStack(alignment: .bottom) {
-            if let agent = currentAgent {
-                Button {
-                    showAvatarPicker = true
-                } label: {
-                    ZStack(alignment: .bottomTrailing) {
-                        agentAvatarImage(agent, size: AppTheme.largeAvatarSize)
-                            .overlay(Circle().stroke(.background, lineWidth: 4))
+    private var headerSwitcherTopOffset: CGFloat {
+        let bannerOverlap: CGFloat = -28
+        let bottomPadding: CGFloat = -12
+        let avatarArea = AppTheme.largeAvatarSize + bannerOverlap + bottomPadding
+        return avatarArea + agentNameButtonHeight + 8
+    }
 
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 24, height: 24)
-                            .background(.tint, in: Circle())
-                            .overlay(Circle().stroke(.background, lineWidth: 2))
-                            .offset(x: 2, y: 2)
-                    }
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
+    private var headerRow: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .bottom) {
+                if let agent = currentAgent {
                     Button {
                         showAvatarPicker = true
                     } label: {
-                        Label("更换头像", systemImage: "photo.on.rectangle")
+                        ZStack(alignment: .bottomTrailing) {
+                            agentAvatarImage(agent, size: AppTheme.largeAvatarSize)
+                                .overlay(Circle().stroke(.background, lineWidth: 4))
+
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 24, height: 24)
+                                .background(.tint, in: Circle())
+                                .overlay(Circle().stroke(.background, lineWidth: 2))
+                                .offset(x: 2, y: 2)
+                        }
                     }
-                    if AvatarStorage.load(for: agent.id) != nil {
-                        Button(role: .destructive) {
-                            AvatarStorage.remove(for: agent.id)
-                            avatarRefreshToken = UUID()
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button {
+                            showAvatarPicker = true
                         } label: {
-                            Label("移除头像", systemImage: "trash")
+                            Label("更换头像", systemImage: "photo.on.rectangle")
+                        }
+                        if AvatarStorage.load(for: agent.id) != nil {
+                            Button(role: .destructive) {
+                                AvatarStorage.remove(for: agent.id)
+                                avatarRefreshToken = UUID()
+                            } label: {
+                                Label("移除头像", systemImage: "trash")
+                            }
                         }
                     }
                 }
-            }
 
-            Spacer()
+                Spacer()
+
+                if let agent = currentAgent {
+                    statusBadge(agent.status)
+                        .padding(.bottom, 8)
+                }
+            }
+            .offset(y: -28)
+            .padding(.bottom, -12)
+
+            if let agent = currentAgent {
+                Button {
+                    showAgentSwitcher.toggle()
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(agent.name)
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .layoutPriority(1)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                    }
+                    .contentTransition(.identity)
+                }
+                .buttonStyle(.plain)
+                .transaction { $0.animation = nil }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear { agentNameButtonHeight = proxy.size.height }
+                            .onChange(of: proxy.size.height) { _, h in agentNameButtonHeight = h }
+                    }
+                }
+                .padding(.bottom, 20)
+            }
         }
-        .offset(y: -28)
-        .padding(.bottom, -12)
         .sheet(isPresented: $showAvatarPicker) {
             if let agent = currentAgent {
                 AvatarPickerSheet(agentId: agent.id) {
@@ -172,56 +235,19 @@ struct AgentProfileView: View {
     }
 
     private func statusBadge(_ status: AgentStatus) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             Circle()
                 .fill(status.color)
-                .frame(width: 6, height: 6)
+                .frame(width: 8, height: 8)
                 .shadow(color: status.color.opacity(0.5), radius: 2, x: 0, y: 0)
             Text(status.label)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(Color(.systemBackground).opacity(0.6), in: Capsule())
         .overlay(Capsule().stroke(Color(.separator).opacity(0.5), lineWidth: 0.5))
-    }
-
-    private var nameSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Menu {
-                ForEach(appState.agents) { agent in
-                    Button {
-                        appState.selectedAgentId = agent.id
-                    } label: {
-                        if agent.id == currentAgent?.id {
-                            Label(agent.name, systemImage: "checkmark")
-                        } else {
-                            Text(agent.name)
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(currentAgent?.name ?? "Agent")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
-                }
-            }
-            .id(currentAgent?.id)
-
-            if let agent = currentAgent {
-                statusBadge(agent.status)
-            }
-        }
-        .padding(.bottom, AppTheme.Spacing.xl)
     }
 
     private func agentAvatarImage(_ agent: Agent, size: CGFloat) -> some View {
@@ -249,40 +275,179 @@ struct AgentProfileView: View {
 
     private var infoCards: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("概览")
-                .font(.headline)
-                .padding(.horizontal, 4)
+            agentProfileCard
+            cronJobsCard
+            advancedSection
+        }
+    }
 
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                statCard(
-                    icon: "cpu",
-                    title: "模型",
-                    value: currentAgent?.model ?? "未设定"
-                )
-                statCard(
-                    icon: "point.3.connected.trianglepath.dotted",
-                    title: "网关",
-                    value: appState.gateways.first(where: { $0.id == currentAgent?.gatewayId })?.name ?? "未连接"
-                )
-                statCard(
-                    icon: "puzzlepiece.extension",
-                    title: "Skills",
-                    value: {
-                        let enabled = appState.skills.filter(\.isEnabled).count
-                        let total = appState.skills.count
-                        return total > 0 ? "\(enabled)/\(total) 已启用" : "暂无"
-                    }()
-                )
-                statCard(
-                    icon: "flame",
-                    title: "Token 消耗",
-                    value: formatTokenCount(currentAgent?.totalTokens ?? 0)
-                )
+    private var agentProfileCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 6) {
+                Image(systemName: "person.text.rectangle")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(currentTheme.accent)
+                Text("Agent 名片")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
-            themeCard
-            cronJobsCard
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "quote.opening")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(currentTheme.accent.opacity(0.8))
+                    .offset(y: -2)
+                
+                Text(currentAgent?.theme ?? "你好！我是你的专属 AI 助手，随时准备为你提供帮助。")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(nil)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemBackground))
+            .clipShape(
+                .rect(
+                    topLeadingRadius: 4,
+                    bottomLeadingRadius: 16,
+                    bottomTrailingRadius: 16,
+                    topTrailingRadius: 16
+                )
+            )
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("核心功能")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                
+                HStack(spacing: 8) {
+                    featureTag("智能对话")
+                    featureTag("知识问答")
+                    featureTag("任务执行")
+                }
+            }
+            .padding(.top, 4)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+    }
+
+    private func featureTag(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .fontWeight(.medium)
+            .foregroundStyle(currentTheme.accent)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(currentTheme.accent.opacity(0.12))
+            .clipShape(Capsule())
+    }
+
+    private func agentSwitcherCard(selectedAgentId: String) -> some View {
+        ScrollView(showsIndicators: appState.agents.count > maxVisibleAgentSwitcherRows) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(appState.agents) { agent in
+                    Button {
+                        showAgentSwitcher = false
+                        appState.selectedAgentId = agent.id
+                    } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Group {
+                                if agent.id == selectedAgentId {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(currentTheme.accent)
+                                } else {
+                                    Color.clear
+                                }
+                            }
+                            .frame(width: 14, height: 14)
+                            .padding(.top, 2)
+
+                            Text(agent.name)
+                                .font(.system(size: 15, weight: agent.id == selectedAgentId ? .semibold : .medium))
+                                .foregroundStyle(.primary)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(agent.id == selectedAgentId ? currentTheme.accent.opacity(0.08) : .clear)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .frame(maxHeight: CGFloat(maxVisibleAgentSwitcherRows) * 52)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 6)
+    }
+
+    private var advancedSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    isAdvancedExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(currentTheme.accent)
+                    Text("Advanced")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isAdvancedExpanded ? 90 : 0))
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isAdvancedExpanded {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                    statCard(
+                        icon: "cpu",
+                        title: "模型",
+                        value: currentAgent?.model ?? "未设定"
+                    )
+                    statCard(
+                        icon: "point.3.connected.trianglepath.dotted",
+                        title: "网关",
+                        value: appState.gateways.first(where: { $0.id == currentAgent?.gatewayId })?.name ?? "未连接"
+                    )
+                    statCard(
+                        icon: "puzzlepiece.extension",
+                        title: "Skills",
+                        value: {
+                            let enabled = appState.skills.filter(\.isEnabled).count
+                            let total = appState.skills.count
+                            return total > 0 ? "\(enabled)/\(total) 已启用" : "暂无"
+                        }()
+                    )
+                    statCard(
+                        icon: "flame",
+                        title: "Token 消耗",
+                        value: formatTokenCount(currentAgent?.totalTokens ?? 0)
+                    )
+                }
+                .padding(.top, 4)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
     }
 
     private var cronJobsCard: some View {
@@ -362,28 +527,6 @@ struct AgentProfileView: View {
             return "\(count)"
         }
         return "—"
-    }
-
-    private var themeCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "text.quote")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(currentTheme.accent)
-                Text("系统设定")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Text(currentAgent?.theme ?? "You are a helpful AI assistant.")
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
     }
 }
 

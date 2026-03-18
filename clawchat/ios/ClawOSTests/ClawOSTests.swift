@@ -248,23 +248,174 @@ struct ClawOSTests {
         #expect(anchorId == nil)
     }
 
-    @Test("sidebar 入口尺寸与 agent 头像基准保持一致")
-    func sidebarUsesUnifiedAvatarSizing() {
-        #expect(HomeSidebarMetrics.controlDiameter == HomeSidebarMetrics.avatarDiameter)
-        #expect(HomeSidebarMetrics.addButtonDiameter == HomeSidebarMetrics.avatarDiameter)
+    @Test("sidebar 入口尺寸与新增按钮尺寸保持一致")
+    func sidebarUsesUnifiedControlSizing() {
+        #expect(HomeSidebarMetrics.controlDiameter == 36)
+        #expect(HomeSidebarMetrics.addButtonDiameter == 36)
     }
 
-    @Test("sidebar 单列宽度为 66pt")
+    @Test("sidebar 单列宽度为 62pt")
     func sidebarUsesCompactWidth() {
-        #expect(HomeSidebarMetrics.singleColumnWidth == 66)
+        #expect(HomeSidebarMetrics.singleColumnWidth == 62)
     }
 
-    @Test("sidebar 最多仅支持双列展开")
-    func sidebarSupportsAtMostTwoColumns() {
-        #expect(HomeSidebarMetrics.columns(for: 1) == 1)
-        #expect(HomeSidebarMetrics.columns(for: 2) == 2)
-        #expect(HomeSidebarMetrics.columns(for: 3) == 2)
-        #expect(HomeSidebarMetrics.doubleColumnWidth > HomeSidebarMetrics.singleColumnWidth)
+    @Test("sidebar 推出式侧边栏使用全高布局")
+    func sidebarUsesFullHeightSlideOut() {
+        #expect(HomeSidebarMetrics.singleColumnWidth == 62)
+        #expect(HomeSidebarMetrics.sidebarLeadingPadding == 10)
+    }
+
+    @Test("sidebar 手势会扩大边缘响应区并降低起滑距离")
+    func sidebarGestureFeelsMoreResponsive() {
+        #expect(HomeSidebarGestureMetrics.edgeActivationWidth == 72)
+        #expect(HomeSidebarGestureMetrics.minimumDistance == 6)
+    }
+
+    @Test("sidebar 单列阶段结束后开始进入扩展进度")
+    func sidebarExpansionStartsAfterCompactPhase() {
+        let level1Travel: CGFloat = 102
+        let level2Travel: CGFloat = 222
+
+        let beforeCompact = SidebarExpansionBehavior.expansionProgress(
+            resolvedOffset: 80,
+            level1Travel: level1Travel,
+            level2Travel: level2Travel
+        )
+        #expect(beforeCompact == 0)
+
+        let afterCompact = SidebarExpansionBehavior.expansionProgress(
+            resolvedOffset: 100,
+            level1Travel: level1Travel,
+            level2Travel: level2Travel
+        )
+        #expect(afterCompact > 0)
+    }
+
+    @Test("sidebar 扩展列数从单列直接跳到四列")
+    func sidebarExpansionJumpsFromOneToFourColumns() {
+        #expect(SidebarExpansionBehavior.columnCount(for: 0.0) == 1)
+        #expect(SidebarExpansionBehavior.columnCount(for: 0.20) == 1)
+        #expect(SidebarExpansionBehavior.columnCount(for: 0.35) == 4)
+        #expect(SidebarExpansionBehavior.columnCount(for: 1.0) == 4)
+    }
+
+    @Test("sidebar 拖动中不会提前显示全屏内容")
+    func sidebarFullscreenContentWaitsUntilSettle() {
+        #expect(
+            SidebarExpansionBehavior.showsFullScreenContent(
+                sidebarLevel: 2,
+                isDragging: true
+            ) == false
+        )
+
+        #expect(
+            SidebarExpansionBehavior.showsFullScreenContent(
+                sidebarLevel: 2,
+                isDragging: false
+            ) == true
+        )
+    }
+
+    @Test("sidebar 在 level1 和 level2 临界点附近使用 hysteresis 防抖")
+    func sidebarLevelTransitionUsesHysteresis() {
+        let level1Travel: CGFloat = 102
+        let level2Travel: CGFloat = 222
+        let boundaryOffset: CGFloat = 138
+
+        #expect(
+            SidebarExpansionBehavior.snapLevel(
+                resolvedOffset: boundaryOffset,
+                level1Travel: level1Travel,
+                level2Travel: level2Travel,
+                previousLevel: 1
+            ) == 1
+        )
+
+        #expect(
+            SidebarExpansionBehavior.snapLevel(
+                resolvedOffset: boundaryOffset,
+                level1Travel: level1Travel,
+                level2Travel: level2Travel,
+                previousLevel: 2
+            ) == 2
+        )
+    }
+
+    @Test("sidebar 会更早从 level1 进入 level2")
+    func sidebarEntersLevelTwoEarlier() {
+        let level1Travel: CGFloat = 102
+        let level2Travel: CGFloat = 222
+
+        #expect(
+            SidebarExpansionBehavior.snapLevel(
+                resolvedOffset: 150,
+                level1Travel: level1Travel,
+                level2Travel: level2Travel,
+                previousLevel: 1
+            ) == 2
+        )
+    }
+
+    @Test("sidebar 层级高于主内容，popup 层级高于 sidebar")
+    func sidebarFloatingLayersStayAboveContent() {
+        #expect(
+            HomeSidebarLayering.zIndex(for: .sidebar)
+            > HomeSidebarLayering.zIndex(for: .sessionList)
+        )
+        #expect(
+            HomeSidebarLayering.zIndex(for: .popup)
+            > HomeSidebarLayering.zIndex(for: .sidebar)
+        )
+    }
+
+    @Test("sidebar popup 过渡会让侧边栏自然淡出并让 popup 渐显")
+    func sidebarPopupTransitionCrossfadesSidebarAndPopup() {
+        #expect(HomeSidebarPopupTransition.sidebarOpacity(for: 0) == 1)
+        #expect(HomeSidebarPopupTransition.popupOpacity(for: 0) == 0)
+
+        #expect(HomeSidebarPopupTransition.sidebarOpacity(for: 0.35) < 1)
+        #expect(HomeSidebarPopupTransition.sidebarScale(for: 0.35) < 1)
+        #expect(HomeSidebarPopupTransition.popupOpacity(for: 0.35) > 0)
+        #expect(HomeSidebarPopupTransition.popupScale(for: 0.35) < 1)
+
+        #expect(HomeSidebarPopupTransition.sidebarOpacity(for: 1) == 0)
+        #expect(HomeSidebarPopupTransition.popupOpacity(for: 1) == 1)
+        #expect(HomeSidebarPopupTransition.popupScale(for: 1) == 1)
+    }
+
+    @Test("sidebar popup 关闭时侧边栏会保持隐藏，不会再次闪现")
+    func sidebarPopupDismissKeepsSidebarHidden() {
+        #expect(
+            HomeSidebarPopupTransition.sidebarOpacity(
+                for: 0.35,
+                suppressSidebar: true
+            ) == 0
+        )
+        #expect(
+            HomeSidebarPopupTransition.sidebarOpacity(
+                for: 0,
+                suppressSidebar: true
+            ) == 0
+        )
+    }
+
+    @Test("sidebar 会优先保留当前 gateway 的 agent 顺序再追加其他 agent")
+    func sidebarExpansionKeepsCurrentGatewayAgentsFirst() {
+        let current = [
+            Agent(id: "a1", name: "A1", avatar: "", status: .online, unreadCount: 0, gatewayId: "gw-1"),
+            Agent(id: "a2", name: "A2", avatar: "", status: .online, unreadCount: 0, gatewayId: "gw-1")
+        ]
+        let all = current + [
+            Agent(id: "b1", name: "B1", avatar: "", status: .idle, unreadCount: 0, gatewayId: "gw-2"),
+            Agent(id: "b2", name: "B2", avatar: "", status: .offline, unreadCount: 0, gatewayId: "gw-3")
+        ]
+
+        let ordered = SidebarExpansionBehavior.orderedAgents(
+            currentGatewayAgents: current,
+            allAgents: all
+        )
+
+        #expect(ordered.map(\.id) == ["a1", "a2", "b1", "b2"])
     }
 
     @Test("session 长按预览默认锚定到最后一条消息")

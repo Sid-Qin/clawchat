@@ -536,7 +536,7 @@ struct SessionRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            agentAvatar(agent, size: 44)
+            agentAvatar(agent, size: 40)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
