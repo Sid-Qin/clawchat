@@ -196,6 +196,18 @@ final class ClawChatManager: @unchecked Sendable {
             }
             self.chatState?.setGatewayOnline(connected.gatewayOnline ?? false)
             self.linkState = .connected
+
+            // Refresh agents list (e.g. gateway came online after initial connect)
+            if let agents = connected.agents, !agents.isEmpty,
+               let relayUrl = self.connectedRelayUrl {
+                Task { @MainActor in
+                    self.syncToAppState(
+                        gatewayId: connected.gatewayId,
+                        relayUrl: relayUrl,
+                        agentIds: agents
+                    )
+                }
+            }
         }
 
         state.onStatusResponse = { [weak self] status in
