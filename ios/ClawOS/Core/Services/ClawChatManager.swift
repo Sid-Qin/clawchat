@@ -82,7 +82,7 @@ final class ClawChatManager: @unchecked Sendable {
             startChatState(client: client)
             chatState?.setGatewayOnline(true)
             linkState = .connected
-            syncToAppState(
+            await syncToAppState(
                 gatewayId: result.gatewayId,
                 relayUrl: relayUrl,
                 agentIds: result.agents ?? ["default"]
@@ -121,7 +121,7 @@ final class ClawChatManager: @unchecked Sendable {
             startChatState(client: client)
             chatState?.setGatewayOnline(result.gatewayOnline)
             linkState = .connected
-            syncToAppState(
+            await syncToAppState(
                 gatewayId: result.gatewayId,
                 relayUrl: relayUrl,
                 agentIds: result.agents ?? ["default"]
@@ -202,12 +202,14 @@ final class ClawChatManager: @unchecked Sendable {
             guard let self,
                   let gatewayId = self.connectedGatewayId,
                   let relayUrl = self.connectedRelayUrl else { return }
-            self.syncToAppState(
-                gatewayId: gatewayId,
-                relayUrl: relayUrl,
-                agentIds: status.agents ?? [],
-                agentsMeta: status.agentsMeta
-            )
+            Task { @MainActor in
+                self.syncToAppState(
+                    gatewayId: gatewayId,
+                    relayUrl: relayUrl,
+                    agentIds: status.agents ?? [],
+                    agentsMeta: status.agentsMeta
+                )
+            }
             print("[ClawChatManager] agents refreshed from status.response: \(status.agents?.count ?? 0) agents")
         }
 
