@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
+      marketing_version: ${{ steps.meta.outputs.marketing_version }}
       build_number: ${{ steps.meta.outputs.build_number }}
       changelog: ${{ steps.changelog.outputs.changelog }}
       is_beta: ${{ steps.meta.outputs.is_beta }}
@@ -24,24 +25,29 @@ jobs:
       - id: meta
         run: |
           TAG="${{ github.ref_name }}"
-          # Tag format: v0.0.1-beta.20260317 or v0.0.1
           # Strip leading 'v'
           FULL="${TAG#v}"
 
-          # Extract version (everything before the build date suffix)
-          # For beta: 0.0.1-beta.20260317 → version=0.0.1-beta.20260317, build=20260317
-          # For stable: 0.0.1 → version=0.0.1, build from tag date
-          if echo "$FULL" | grep -qE '\.(20[0-9]{6})$'; then
-            BUILD=$(echo "$FULL" | grep -oE '20[0-9]{6}$')
+          # Extract marketing version (X.Y.Z only, for Apple)
+          MARKETING=$(echo "$FULL" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
+
+          # Extract build number (YYYYMMDD date portion)
+          if echo "$FULL" | grep -qE '(20[0-9]{6})'; then
+            BUILD=$(echo "$FULL" | grep -oE '20[0-9]{6}')
           else
             BUILD=$(date +%Y%m%d)
           fi
+
+          # Full version string for display (e.g. 0.0.1-beta.20260319.5)
           VERSION="$FULL"
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "marketing_version=$MARKETING" >> "$GITHUB_OUTPUT"
           echo "build_number=$BUILD" >> "$GITHUB_OUTPUT"
 
           if echo "$TAG" | grep -q "beta"; then
+            echo "is_beta=true" >> "$GITHUB_OUTPUT"
+          elif echo "$TAG" | grep -q "alpha"; then
             echo "is_beta=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_beta=false" >> "$GITHUB_OUTPUT"
@@ -118,7 +124,7 @@ jobs:
       - name: Build iOS archive
         working-directory: ios
         env:
-          VERSION: ${{ needs.prepare.outputs.version }}
+          MARKETING_VER: ${{ needs.prepare.outputs.marketing_version }}
           BUILD: ${{ needs.prepare.outputs.build_number }}
         run: |
           xcodebuild -project ClawOS.xcodeproj \
@@ -127,7 +133,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath build/ClawChat.xcarchive \
             archive \
-            MARKETING_VERSION="${VERSION}" \
+            MARKETING_VERSION="${MARKETING_VER}" \
             CURRENT_PROJECT_VERSION="${BUILD}" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
