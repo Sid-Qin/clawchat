@@ -14,6 +14,7 @@ public final class ChatState: @unchecked Sendable {
 
     public var onAppConnected: ((AppConnected) -> Void)?
     public var onStatusResponse: ((StatusResponse) -> Void)?
+    public var onFatalError: ((ErrorMessage) -> Void)?
 
     // MARK: - Internal state
 
@@ -266,6 +267,14 @@ public final class ChatState: @unchecked Sendable {
 
     @MainActor
     private func handleError(_ error: ErrorMessage) {
+        switch error.code {
+        case .unauthorized, .deviceRevoked:
+            onFatalError?(error)
+            return
+        default:
+            break
+        }
+
         let errorMessage = ChatMessage(
             id: error.id,
             role: .assistant,

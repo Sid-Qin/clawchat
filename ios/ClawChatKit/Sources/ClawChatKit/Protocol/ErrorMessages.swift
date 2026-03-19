@@ -12,6 +12,7 @@ public enum ClawChatErrorCode: Codable, Sendable, Equatable {
     case internalError
     case invalidMessage
     case incompatibleVersion
+    case deviceRevoked
     case unknown(String)
 
     public init(from decoder: Decoder) throws {
@@ -26,6 +27,7 @@ public enum ClawChatErrorCode: Codable, Sendable, Equatable {
         case "internal_error": self = .internalError
         case "invalid_message": self = .invalidMessage
         case "incompatible_version": self = .incompatibleVersion
+        case "device_revoked": self = .deviceRevoked
         default: self = .unknown(raw)
         }
     }
@@ -42,6 +44,7 @@ public enum ClawChatErrorCode: Codable, Sendable, Equatable {
         case .internalError: try container.encode("internal_error")
         case .invalidMessage: try container.encode("invalid_message")
         case .incompatibleVersion: try container.encode("incompatible_version")
+        case .deviceRevoked: try container.encode("device_revoked")
         case .unknown(let raw): try container.encode(raw)
         }
     }

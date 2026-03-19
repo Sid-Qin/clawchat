@@ -9,6 +9,7 @@ public actor WebSocketClient {
     private let pingIntervalSeconds: TimeInterval = 30
     private let pongTimeoutSeconds: TimeInterval = 10
     private let maxBackoffSeconds: TimeInterval = 60
+    private let maxReconnectAttempts = 10
 
     // MARK: - State
 
@@ -184,7 +185,13 @@ public actor WebSocketClient {
 
         guard !closed else { return }
 
-        // Schedule reconnect with exponential backoff
+        // Give up after max attempts — avoid zombie reconnect loops
+        guard attempt < maxReconnectAttempts else {
+            print("[ClawChatKit] max reconnect attempts (\(maxReconnectAttempts)) reached, giving up")
+            return
+        }
+
+        // Schedule reconnect with exponential backoff (1, 2, 4, 8, 16, 32, 60, 60, 60, 60)
         let delay = min(pow(2.0, Double(attempt)), maxBackoffSeconds)
         attempt += 1
         setConnectionState(.connecting)

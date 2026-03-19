@@ -229,6 +229,14 @@ final class ClawChatManager: @unchecked Sendable {
             print("[ClawChatManager] agents refreshed from status.response: \(status.agents?.count ?? 0) agents")
         }
 
+        state.onFatalError = { [weak self] error in
+            guard let self else { return }
+            print("[ClawChatManager] fatal error: \(error.code) — \(error.message)")
+            Task {
+                await self.unpair()
+            }
+        }
+
         Task {
             await client.setReconnectHandler { [weak self] in
                 Task { @MainActor in
