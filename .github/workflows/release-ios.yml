@@ -31,11 +31,16 @@ jobs:
           # Extract marketing version (X.Y.Z only, for Apple)
           MARKETING=$(echo "$FULL" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
 
-          # Extract build number (YYYYMMDD date portion)
-          if echo "$FULL" | grep -qE '(20[0-9]{6})'; then
+          # Extract build number: YYYYMMDD + daily sequence → YYYYMMDDN
+          # e.g. 0.0.1-beta.20260319.13 → 2026031913
+          if echo "$FULL" | grep -qE '20[0-9]{6}\.[0-9]+'; then
+            DATE_PART=$(echo "$FULL" | grep -oE '20[0-9]{6}')
+            SEQ_PART=$(echo "$FULL" | grep -oE '20[0-9]{6}\.([0-9]+)' | sed 's/.*\.//')
+            BUILD="${DATE_PART}${SEQ_PART}"
+          elif echo "$FULL" | grep -qE '20[0-9]{6}'; then
             BUILD=$(echo "$FULL" | grep -oE '20[0-9]{6}')
           else
-            BUILD=$(date +%Y%m%d)
+            BUILD=$(date +%Y%m%d)1
           fi
 
           # Full version string for display (e.g. 0.0.1-beta.20260319.5)
