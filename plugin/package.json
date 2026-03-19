@@ -1,5 +1,5 @@
 {
-  "name": "clawchat",
+  "name": "clawchat-openclaw",
   "version": "0.1.0",
   "type": "module",
   "description": "ClawChat channel plugin for OpenClaw",
@@ -10,6 +10,10 @@
   "openclaw": {
     "extensions": ["./src/index.ts"]
   },
+  "files": [
+    "src",
+    "openclaw.plugin.json"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
