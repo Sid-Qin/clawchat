@@ -1,6 +1,6 @@
 {
-  "name": "clawchat-openclaw",
-  "version": "0.1.3",
+  "name": "clawchat-plugin",
+  "version": "0.1.4",
   "type": "module",
   "description": "ClawChat channel plugin for OpenClaw",
   "license": "MIT",

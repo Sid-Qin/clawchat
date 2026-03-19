@@ -4,7 +4,7 @@
  * Bridges paired iOS/Android apps to your OpenClaw agent via the ClawChat relay.
  *
  * Install:
- *   openclaw plugins install clawchat-openclaw
+ *   openclaw plugins install clawchat-plugin
  *
  * Configure in ~/.openclaw/openclaw.json (or yaml):
  *   plugins:
