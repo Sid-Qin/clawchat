@@ -51,6 +51,8 @@ export function handleGatewayMessage(
       return onDevicesList(ws, msg as unknown as DevicesList, db);
     case "devices.revoke":
       return onDevicesRevoke(ws, msg as unknown as DevicesRevoke, db);
+    case "ping":
+      return send(ws, { type: "pong", id: msg.id, ts: Date.now() });
     default:
       // Forward gateway -> apps relay messages
       return forwardToApps(ws, msg, raw, db);

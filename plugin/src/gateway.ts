@@ -12,6 +12,8 @@ import type { ClawChatAccount } from "./types.js";
 
 const CHANNEL_ID = "clawchat";
 const PAIRING_REFRESH_INTERVAL = 4 * 60 * 1000;
+const PING_INTERVAL = 25_000;
+const PONG_TIMEOUT = 10_000;
 
 type GatewayCtx = {
   cfg: unknown;
@@ -78,6 +80,8 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
   let relayWs: WebSocket | null = null;
   let relayReady = false;
   let pairingTimer: ReturnType<typeof setInterval> | null = null;
+  let pingTimer: ReturnType<typeof setInterval> | null = null;
+  let pongTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ------------------------------------------------------------------
   // Relay connection
@@ -100,11 +104,16 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
         agents,
         agentsMeta,
       });
+      startPing();
     });
 
     relayWs.addEventListener("message", (event) => {
       try {
         const msg = JSON.parse(event.data as string);
+        if (msg.type === "pong") {
+          clearPongTimeout();
+          return;
+        }
         handleMessage(msg);
       } catch {
         log?.warn?.("[clawchat] Failed to parse relay message");
@@ -114,6 +123,7 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
     relayWs.addEventListener("close", () => {
       log?.info?.("[clawchat] Relay disconnected");
       relayReady = false;
+      stopPing();
       stopPairingRefresh();
       if (!abortSignal.aborted) setTimeout(connect, 5000);
     });
@@ -277,6 +287,28 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
   // Helpers
   // ------------------------------------------------------------------
 
+  function startPing() {
+    stopPing();
+    pingTimer = setInterval(() => {
+      if (relayWs?.readyState === WebSocket.OPEN) {
+        send({ type: "ping", id: crypto.randomUUID(), ts: Date.now() });
+        pongTimer = setTimeout(() => {
+          log?.warn?.("[clawchat] Pong timeout, reconnecting...");
+          relayWs?.close();
+        }, PONG_TIMEOUT);
+      }
+    }, PING_INTERVAL);
+  }
+
+  function stopPing() {
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+    clearPongTimeout();
+  }
+
+  function clearPongTimeout() {
+    if (pongTimer) { clearTimeout(pongTimer); pongTimer = null; }
+  }
+
   function requestPairingCode() {
     send({ type: "pair.generate", id: crypto.randomUUID(), ts: Date.now() });
   }
@@ -292,7 +324,7 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
     if (pairingTimer) { clearInterval(pairingTimer); pairingTimer = null; }
   }
 
-  abortSignal.addEventListener("abort", stopPairingRefresh, { once: true });
+  abortSignal.addEventListener("abort", () => { stopPairingRefresh(); stopPing(); }, { once: true });
 
   connect();
 
