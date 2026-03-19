@@ -1,0 +1,14 @@
+{
+  "name": "clawchat",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "service",
+    "cli",
+    "plugin"
+  ],
+  "devDependencies": {
+    "bun-types": "^1.3.10",
+    "typescript": "^5.9.3"
+  }
+}
