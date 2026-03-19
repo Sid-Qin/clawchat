@@ -186,6 +186,7 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
   // ------------------------------------------------------------------
 
   async function handleInbound(msg: any) {
+    log?.info?.(`[clawchat] handleInbound: text="${(msg.text || "").slice(0, 50)}" from=${msg.deviceId ?? msg.from ?? "?"}`);
     const rt = getClawChatRuntime();
 
     send({ type: "typing", id: crypto.randomUUID(), ts: Date.now(), active: true });
@@ -263,6 +264,7 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
           },
         },
       });
+      log?.info?.("[clawchat] dispatch completed");
     } catch (err) {
       log?.error?.(`[clawchat] Failed to dispatch inbound: ${String((err as Error)?.message ?? err)}`);
       if (relayReady) {
