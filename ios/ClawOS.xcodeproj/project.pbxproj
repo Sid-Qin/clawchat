@@ -407,9 +407,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = LBN3W98T26;
 				ENABLE_PREVIEWS = YES;
-				EXCLUDED_SOURCE_FILE_NAMES = Info.plist;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = ClawOS/Info.plist;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "ClawOS needs access to the local network to connect to OpenClaw Gateway";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ClawOS needs access to the microphone for voice input";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "ClawOS needs speech recognition to convert voice to text";
@@ -445,9 +444,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = LBN3W98T26;
 				ENABLE_PREVIEWS = YES;
-				EXCLUDED_SOURCE_FILE_NAMES = Info.plist;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = ClawOS/Info.plist;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "ClawOS needs access to the local network to connect to OpenClaw Gateway";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ClawOS needs access to the microphone for voice input";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "ClawOS needs speech recognition to convert voice to text";
