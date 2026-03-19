@@ -18,7 +18,7 @@
         "default": "clawchat"
       }
     },
-    "required": ["token"]
+    "required": []
   },
   "uiHints": {
     "relay": {
