@@ -77,7 +77,7 @@ struct SessionListView: View {
             }
             .padding(.horizontal, 14)
             .frame(height: 36)
-            .glassEffect(.regular, in: .capsule)
+            .adaptiveGlass(in: .capsule)
 
             Button {
                 _ = appState.startNewSession()
@@ -88,7 +88,7 @@ struct SessionListView: View {
                     .frame(width: 36, height: 36)
                     .contentShape(Circle())
             }
-            .glassEffect(.regular, in: .circle)
+            .adaptiveGlass(in: .circle)
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
         .padding(.top, 8)
