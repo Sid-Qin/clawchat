@@ -278,6 +278,7 @@ const FORWARD_TYPES = new Set([
   "message.reasoning",
   "tool.event",
   "typing",
+  "status.response",
 ]);
 
 /** Message types that should be queued for offline devices (not typing/presence). */

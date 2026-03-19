@@ -231,21 +231,20 @@ function onStatusRequest(
   }
 
   const gwSocket = getGatewaySocket(data.gatewayId);
-  const online = isGatewayOnline(data.gatewayId);
-  const gwData = gwSocket?.data as GatewayWsData | undefined;
-
-  send(ws, {
-    type: "status.response",
-    id: crypto.randomUUID(),
-    ts: Date.now(),
-    gateway: {
-      online,
-      version: "", // Gateway doesn't expose version via socket data in Phase 0
-      uptime: 0,
-      agents: gwData?.agents ?? [],
-      channels: [],
-    },
-  });
+  if (gwSocket) {
+    // Forward to gateway — it will reply with status.response directly
+    gwSocket.send(JSON.stringify({ type: "status.request", id: crypto.randomUUID(), ts: Date.now() }));
+  } else {
+    // Gateway offline — reply with flat format matching client expectations
+    send(ws, {
+      type: "status.response",
+      id: crypto.randomUUID(),
+      ts: Date.now(),
+      gatewayOnline: false,
+      agents: [],
+      connectedDevices: 0,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

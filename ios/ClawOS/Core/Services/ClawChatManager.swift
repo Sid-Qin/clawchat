@@ -87,6 +87,8 @@ final class ClawChatManager: @unchecked Sendable {
                 relayUrl: relayUrl,
                 agentIds: result.agents ?? ["default"]
             )
+            // Request latest agents from gateway (relay may return stale/empty list)
+            await client.send(StatusRequest())
         } catch {
             linkState = .error(error.localizedDescription)
             throw error
@@ -126,6 +128,8 @@ final class ClawChatManager: @unchecked Sendable {
                 relayUrl: relayUrl,
                 agentIds: result.agents ?? ["default"]
             )
+            // Request latest agents from gateway (relay may return stale/empty list)
+            await client.send(StatusRequest())
         } catch {
             linkState = .error(error.localizedDescription)
         }
