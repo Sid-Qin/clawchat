@@ -72,7 +72,7 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
   const { account, abortSignal, log } = ctx;
   const { relay: relayUrl, token: gatewayToken, session: sessionKey } = account;
 
-  const gatewayId = `openclaw-${ctx.accountId}`;
+  const gatewayId = `gw-${crypto.createHash("sha256").update(gatewayToken).digest("hex").slice(0, 12)}`;
   const { agents, agentsMeta } = buildAgentDescriptors(ctx.cfg);
 
   log?.info?.(`[clawchat] Starting gateway accountId=${ctx.accountId} relay=${relayUrl} agents=${agents.length}`);
