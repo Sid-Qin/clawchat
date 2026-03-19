@@ -215,6 +215,11 @@ jobs:
           CHANGELOG: ${{ needs.prepare.outputs.changelog }}
           IS_BETA: ${{ needs.prepare.outputs.is_beta }}
         run: |
+          if [ -z "$FEISHU_WEBHOOK" ]; then
+            echo "FEISHU_WEBHOOK_URL not set, skipping notification"
+            exit 0
+          fi
+
           if [ "$IS_BETA" = "true" ]; then
             LABEL="Beta"
             HEADER_COLOR="orange"
