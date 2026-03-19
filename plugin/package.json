@@ -1,0 +1,25 @@
+{
+  "name": "clawchat-plugin",
+  "version": "0.1.4",
+  "type": "module",
+  "description": "ClawChat channel plugin for OpenClaw",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "openclaw": {
+    "extensions": ["./src/index.ts"]
+  },
+  "files": [
+    "src",
+    "openclaw.plugin.json"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "openclaw": "*"
+  }
+}
