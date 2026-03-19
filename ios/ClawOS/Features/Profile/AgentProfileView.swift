@@ -331,7 +331,7 @@ struct AgentProfileView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+        .adaptiveGlass(in: .rect(cornerRadius: AppTheme.Radius.lg))
     }
 
     private func featureTag(_ text: String) -> some View {
@@ -388,7 +388,7 @@ struct AgentProfileView: View {
         .frame(maxHeight: CGFloat(maxVisibleAgentSwitcherRows) * 52)
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+        .adaptiveGlass(in: .rect(cornerRadius: AppTheme.Radius.lg))
         .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 6)
     }
 
@@ -447,7 +447,7 @@ struct AgentProfileView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+        .adaptiveGlass(in: .rect(cornerRadius: AppTheme.Radius.lg))
     }
 
     private var cronJobsCard: some View {
@@ -470,7 +470,7 @@ struct AgentProfileView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+        .adaptiveGlass(in: .rect(cornerRadius: AppTheme.Radius.lg))
     }
 
     private func cronJobRow(time: String, description: String, isActive: Bool) -> some View {
@@ -515,7 +515,7 @@ struct AgentProfileView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: AppTheme.Radius.lg))
+        .adaptiveGlass(in: .rect(cornerRadius: AppTheme.Radius.lg))
     }
 
     private func formatTokenCount(_ count: Int) -> String {
@@ -750,7 +750,7 @@ struct AvatarPickerSheet: View {
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .glassEffect(.regular, in: .capsule)
+            .adaptiveGlass(in: .capsule)
         }
         .buttonStyle(.plain)
     }

@@ -64,7 +64,7 @@ struct AgentSidebarView: View {
             )
         }
         .frame(maxHeight: .infinity)
-        .glassEffect(.regular, in: .rect(cornerRadius: 28))
+        .adaptiveGlass(in: .rect(cornerRadius: 28))
         .shadow(color: .black.opacity(0.10), radius: 12, x: 0, y: 4)
         .sheet(isPresented: $showAddAgent) {
             AgentEditorView()
@@ -168,7 +168,7 @@ struct AgentSidebarView: View {
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(isConnected ? .primary : .secondary)
                 .frame(width: HomeSidebarMetrics.controlDiameter, height: HomeSidebarMetrics.controlDiameter)
-                .glassEffect(.regular, in: .circle)
+                .adaptiveGlass(in: .circle)
 
             Circle()
                 .fill(gatewayStatusColor)
@@ -208,7 +208,7 @@ struct AgentSidebarView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
                 .frame(width: HomeSidebarMetrics.addButtonDiameter, height: HomeSidebarMetrics.addButtonDiameter)
-                .glassEffect(.regular, in: .circle)
+                .adaptiveGlass(in: .circle)
         }
         .buttonStyle(.plain)
     }

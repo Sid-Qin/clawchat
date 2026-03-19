@@ -29,7 +29,7 @@ struct AgentGlassPopupView: View {
         }
         .frame(maxWidth: HomeSidebarMetrics.screenWidth - 40, maxHeight: 580)
         .fixedSize(horizontal: false, vertical: true)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        .adaptiveGlass(in: .rect(cornerRadius: 24))
         .shadow(color: .black.opacity(0.15), radius: 30, x: 0, y: 10)
         .padding(.leading, 16)
         .padding(.top, -50)
@@ -101,7 +101,7 @@ struct AgentGlassPopupView: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(.regular, in: .rect(cornerRadius: 10))
+            .adaptiveGlass(in: .rect(cornerRadius: 10))
         }
         .buttonStyle(.plain)
     }
@@ -158,7 +158,7 @@ struct AgentGlassPopupView: View {
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(isSelected ? accent : .clear, lineWidth: 1.5)
             )
-            .glassEffect(.regular, in: .rect(cornerRadius: 10))
+            .adaptiveGlass(in: .rect(cornerRadius: 10))
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: isSelected)
