@@ -60,5 +60,67 @@ export function createHttpRoutes(db: DbStore): Hono {
     });
   });
 
+  // List paired devices (auth: Bearer gateway-token)
+  app.get("/api/devices", (c) => {
+    const auth = c.req.header("Authorization");
+    if (!auth?.startsWith("Bearer ")) {
+      return c.json({ error: "Missing or invalid Authorization header" }, 401);
+    }
+
+    const token = auth.slice(7);
+    const gateway = db.findGateway(token);
+    if (!gateway) {
+      return c.json({ error: "Unknown gateway token" }, 403);
+    }
+
+    const devices = db.listDevicesByGateway(gateway.gatewayId);
+    return c.json({ gatewayId: gateway.gatewayId, devices });
+  });
+
+  // Revoke a device (auth: Bearer gateway-token)
+  app.delete("/api/devices/:deviceId", (c) => {
+    const auth = c.req.header("Authorization");
+    if (!auth?.startsWith("Bearer ")) {
+      return c.json({ error: "Missing or invalid Authorization header" }, 401);
+    }
+
+    const token = auth.slice(7);
+    const gateway = db.findGateway(token);
+    if (!gateway) {
+      return c.json({ error: "Unknown gateway token" }, 403);
+    }
+
+    const deviceId = c.req.param("deviceId");
+    const deleted = db.revokeDevice(deviceId);
+    if (!deleted) {
+      return c.json({ error: "Device not found" }, 404);
+    }
+
+    log("info", "http.device.revoke", { deviceId, gatewayId: gateway.gatewayId });
+    return c.json({ ok: true });
+  });
+
+  // Revoke all devices for a gateway (auth: Bearer gateway-token)
+  app.delete("/api/devices", (c) => {
+    const auth = c.req.header("Authorization");
+    if (!auth?.startsWith("Bearer ")) {
+      return c.json({ error: "Missing or invalid Authorization header" }, 401);
+    }
+
+    const token = auth.slice(7);
+    const gateway = db.findGateway(token);
+    if (!gateway) {
+      return c.json({ error: "Unknown gateway token" }, 403);
+    }
+
+    const devices = db.listDevicesByGateway(gateway.gatewayId);
+    for (const device of devices) {
+      db.revokeDevice(device.deviceId);
+    }
+
+    log("info", "http.devices.revoke_all", { gatewayId: gateway.gatewayId, count: devices.length });
+    return c.json({ ok: true, revoked: devices.length });
+  });
+
   return app;
 }
