@@ -155,7 +155,7 @@ export function createDb(path: string): DbStore {
        RETURNING *`,
     ),
     findGatewayByToken: db.prepare<GatewayRow, [string]>(
-      "SELECT * FROM gateways WHERE token = ?1",
+      "SELECT * FROM gateways WHERE token = ?1 ORDER BY createdAt DESC LIMIT 1",
     ),
     findGatewayById: db.prepare<GatewayRow, [string]>(
       "SELECT * FROM gateways WHERE gatewayId = ?1",

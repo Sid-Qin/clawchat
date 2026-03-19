@@ -46,9 +46,7 @@ public actor PairingManager {
                     case .appPairError(let error):
                         throw Self.pairingError(from: error.error)
                     case .error(let error):
-                        if error.code == .unauthorized {
-                            throw PairingError.unauthorized
-                        }
+                        throw Self.mapServerError(error)
                     default:
                         continue
                     }
@@ -88,10 +86,7 @@ public actor PairingManager {
                             newDeviceToken: connected.newDeviceToken
                         )
                     case .error(let error):
-                        if error.code == .unauthorized {
-                            throw PairingError.unauthorized
-                        }
-                        throw PairingError.networkError(error.message)
+                        throw Self.mapServerError(error)
                     default:
                         continue
                     }
@@ -122,6 +117,17 @@ public actor PairingManager {
             return .codeExpired
         case .gatewayOffline:
             return .gatewayOffline
+        }
+    }
+
+    private static func mapServerError(_ error: ErrorMessage) -> PairingError {
+        switch error.code {
+        case .unauthorized:
+            return .unauthorized
+        case .unknown(let raw) where raw == "device_limit" || raw == "connection_limit":
+            return .deviceLimit
+        default:
+            return .networkError(error.message)
         }
     }
 }
