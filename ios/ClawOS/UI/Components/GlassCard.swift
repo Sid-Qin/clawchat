@@ -36,6 +36,7 @@ private struct AdaptiveGlassModifier<S: InsettableShape>: ViewModifier {
     let interactive: Bool
 
     func body(content: Content) -> some View {
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             content
                 .glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
@@ -43,11 +44,16 @@ private struct AdaptiveGlassModifier<S: InsettableShape>: ViewModifier {
             content
                 .background(.ultraThinMaterial, in: shape)
         }
+        #else
+        content
+            .background(.ultraThinMaterial, in: shape)
+        #endif
     }
 }
 
 private struct AdaptiveGlassButtonStyleModifier: ViewModifier {
     func body(content: Content) -> some View {
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             content
                 .buttonStyle(.glass)
@@ -55,6 +61,10 @@ private struct AdaptiveGlassButtonStyleModifier: ViewModifier {
             content
                 .buttonStyle(.bordered)
         }
+        #else
+        content
+            .buttonStyle(.bordered)
+        #endif
     }
 }
 
@@ -62,6 +72,7 @@ private struct AdaptiveGlassAnyShapeModifier: ViewModifier {
     let shape: AnyShape
 
     func body(content: Content) -> some View {
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             content
                 .glassEffect(.regular, in: shape)
@@ -70,5 +81,10 @@ private struct AdaptiveGlassAnyShapeModifier: ViewModifier {
                 .background(.ultraThinMaterial)
                 .clipShape(shape)
         }
+        #else
+        content
+            .background(.ultraThinMaterial)
+            .clipShape(shape)
+        #endif
     }
 }

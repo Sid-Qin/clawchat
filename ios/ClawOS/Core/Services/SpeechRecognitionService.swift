@@ -200,7 +200,7 @@ final class SpeechRecognitionService {
         try audioSession.setCategory(
             .playAndRecord,
             mode: .measurement,
-            options: [.defaultToSpeaker, .allowBluetoothHFP]
+            options: [.defaultToSpeaker, .allowBluetooth]
         )
         try? audioSession.setPreferredIOBufferDuration(0.005)
 
