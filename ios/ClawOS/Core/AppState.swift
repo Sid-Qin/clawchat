@@ -13,6 +13,7 @@ final class AppState {
     private static let sessionsKey = "clawos_sessions"
     private static let messagesKey = "clawos_messages"
     private static let themeKey = "clawos_theme"
+    private static let agentAvatarsKey = "clawos_agent_avatars"
 
     var agents: [Agent] = []
     var gateways: [Gateway] = []
@@ -143,10 +144,11 @@ final class AppState {
                 agents[idx].availableModels = availableModels
                 agents[idx].status = .online
             } else {
+                let savedAvatar = loadAgentAvatars()[agentId] ?? ""
                 let agent = Agent(
                     id: agentId,
                     name: agentName,
-                    avatar: "",
+                    avatar: savedAvatar,
                     status: .online,
                     unreadCount: 0,
                     gatewayId: gatewayId,
@@ -214,6 +216,7 @@ final class AppState {
     func updateAgentAvatar(id: String, avatar: String) {
         guard let idx = agents.firstIndex(where: { $0.id == id }) else { return }
         agents[idx].avatar = avatar
+        persistAgentAvatars()
     }
 
     func markGatewayOffline(_ gatewayId: String) {
@@ -295,6 +298,21 @@ final class AppState {
         guard let data = UserDefaults.standard.data(forKey: Self.messagesKey),
               let saved = try? JSONDecoder().decode([String: [StoredMessage]].self, from: data) else { return }
         messagesBySession = saved
+    }
+
+    // MARK: - Agent Avatar Persistence
+
+    private func persistAgentAvatars() {
+        let map = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, $0.avatar) })
+        if let data = try? JSONEncoder().encode(map) {
+            UserDefaults.standard.set(data, forKey: Self.agentAvatarsKey)
+        }
+    }
+
+    private func loadAgentAvatars() -> [String: String] {
+        guard let data = UserDefaults.standard.data(forKey: Self.agentAvatarsKey),
+              let map = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
+        return map
     }
 
     // MARK: - Theme Persistence
