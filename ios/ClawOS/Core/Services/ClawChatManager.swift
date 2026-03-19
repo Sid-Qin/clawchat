@@ -257,9 +257,8 @@ final class ClawChatManager: @unchecked Sendable {
         let message = AppConnect(deviceToken: credentials.deviceToken)
         Task {
             await client.send(message)
-            await MainActor.run { [weak self] in
-                self?.linkState = .connected
-            }
+            // Don't set .connected here — wait for onAppConnected callback
+            // which also handles token rotation and gateway state
         }
     }
 }
