@@ -13,6 +13,7 @@ public final class ChatState: @unchecked Sendable {
     public private(set) var gatewayOnline: Bool = false
 
     public var onAppConnected: ((AppConnected) -> Void)?
+    public var onStatusResponse: ((StatusResponse) -> Void)?
 
     // MARK: - Internal state
 
@@ -137,6 +138,8 @@ public final class ChatState: @unchecked Sendable {
             handleError(error)
         case .appConnected(let connected):
             onAppConnected?(connected)
+        case .statusResponse(let status):
+            onStatusResponse?(status)
         default:
             break
         }

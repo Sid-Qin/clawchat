@@ -151,6 +151,16 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
       case "app.paired":
       case "app.connected":
         log?.info?.(`[clawchat] Device ${msg.type}`);
+        // Push latest agents to newly connected app
+        send({
+          type: "status.response",
+          id: crypto.randomUUID(),
+          ts: Date.now(),
+          gatewayOnline: true,
+          connectedDevices: 1,
+          agents,
+          agentsMeta,
+        });
         break;
 
       case "status.request":
@@ -160,6 +170,8 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
           ts: Date.now(),
           gatewayOnline: true,
           connectedDevices: 1,
+          agents,
+          agentsMeta,
         });
         break;
 
