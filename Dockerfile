@@ -6,9 +6,10 @@ COPY package.json bun.lock ./
 COPY packages/protocol/package.json packages/protocol/
 COPY service/package.json service/
 COPY cli/package.json cli/
+COPY plugin/package.json plugin/
 RUN bun install --frozen-lockfile
 
-# Copy source code
+# Copy source code (cache bust: 20260319-1)
 COPY packages/protocol/ packages/protocol/
 COPY service/ service/
 COPY tsconfig.base.json ./
@@ -19,3 +20,4 @@ ENV PORT=8787
 ENV DB_PATH=/data/clawchat.db
 
 CMD ["bun", "service/src/index.ts"]
+
