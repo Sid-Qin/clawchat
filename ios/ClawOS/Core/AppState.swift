@@ -112,6 +112,9 @@ final class AppState {
 
         selectedGatewayId = gatewayId
 
+        // Skip agent updates when server returns empty list (gateway offline)
+        guard !agentIds.isEmpty else { return }
+
         let parsedAgents = agentIds.map { rawAgentId in
             parseAgentDescriptor(rawAgentId, meta: agentsMeta?[rawAgentId])
         }
