@@ -114,6 +114,7 @@ async function install() {
     try {
       execSync(`openclaw plugins install ${PLUGIN_ID}`, {
         stdio: "inherit",
+        shell: process.env.SHELL || true,
       });
     } catch {
       console.log("  ⚠ Auto-install failed. Run manually:");
@@ -148,7 +149,7 @@ async function install() {
   // 5. Restart gateway first (plugin must connect to relay before pairing)
   console.log("  ⏳ Restarting gateway...");
   try {
-    execSync("openclaw gateway restart", { stdio: "inherit" });
+    execSync("openclaw gateway restart", { stdio: "inherit", shell: process.env.SHELL || true });
     console.log("  ✓ Gateway restarted");
   } catch {
     console.log("  ⚠ Could not restart gateway. Run manually:");
