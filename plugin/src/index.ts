@@ -4,7 +4,7 @@
  * Bridges paired iOS/Android apps to your OpenClaw agent via the ClawChat relay.
  *
  * Install:
- *   openclaw plugins install clawchat
+ *   openclaw plugins install clawchat-openclaw
  *
  * The plugin auto-generates a gateway token on first run and writes it to
  * your config. A pairing QR code is printed to the terminal automatically.
@@ -46,11 +46,11 @@ async function ensureToken(api: any): Promise<string> {
         ...currentConfig.plugins,
         entries: {
           ...currentConfig.plugins?.entries,
-          clawchat: {
-            ...currentConfig.plugins?.entries?.clawchat,
+          "clawchat-openclaw": {
+            ...currentConfig.plugins?.entries?.["clawchat-openclaw"],
             enabled: true,
             config: {
-              ...currentConfig.plugins?.entries?.clawchat?.config,
+              ...currentConfig.plugins?.entries?.["clawchat-openclaw"]?.config,
               token,
             },
           },

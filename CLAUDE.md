@@ -23,7 +23,7 @@ Client App ──> ClawChat Service (relay) <── OpenClaw Gateway
 ```
 
 - **ClawChat Service**: Lightweight WebSocket relay. Routes messages between paired gateways and apps.
-- **Channel Plugin**: [`clawchat`](https://www.npmjs.com/package/clawchat) on npm. Standard channel plugin.
+- **Channel Plugin**: [`clawchat-openclaw`](https://www.npmjs.com/package/clawchat-openclaw) on npm. Standard channel plugin.
 - **Client Apps**: iOS, Android, CLI. Any app implementing the wire protocol can connect.
 
 ## Plugin Usage
@@ -31,7 +31,7 @@ Client App ──> ClawChat Service (relay) <── OpenClaw Gateway
 ### Install
 
 ```bash
-openclaw plugins install clawchat
+openclaw plugins install clawchat-openclaw
 ```
 
 ### Configure
@@ -41,7 +41,7 @@ In `~/.openclaw/openclaw.json` (or yaml):
 ```yaml
 plugins:
   entries:
-    clawchat:
+    clawchat-openclaw:
       enabled: true
       config:
         token: <your-relay-gateway-token>
