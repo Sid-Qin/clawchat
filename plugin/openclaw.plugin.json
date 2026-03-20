@@ -1,5 +1,5 @@
 {
-  "id": "clawchat-openclaw",
+  "id": "clawchat",
   "name": "ClawChat",
   "description": "First-party mobile messaging for OpenClaw. Connects to the ClawChat relay so iOS/Android apps can chat with your agent.",
   "configSchema": {

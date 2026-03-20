@@ -1,6 +1,6 @@
 {
-  "name": "clawchat-openclaw",
-  "version": "0.3.2",
+  "name": "@claw-os/clawchat",
+  "version": "0.1.0",
   "type": "module",
   "description": "ClawChat channel plugin for OpenClaw",
   "license": "MIT",
@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "bin": {
-    "clawchat-openclaw": "bin/clawchat-openclaw.mjs"
+    "clawchat": "bin/clawchat.mjs"
   },
   "openclaw": {
     "extensions": ["./src/index.ts"]
@@ -22,7 +22,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0"
+  },
   "peerDependencies": {
     "openclaw": "*"
   }

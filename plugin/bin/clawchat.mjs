@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 /**
- * ClawChat OpenClaw installer CLI.
+ * ClawChat installer CLI.
  *
  * Usage:
- *   npx clawchat-openclaw install    — install plugin, configure, and show pairing QR
- *   npx clawchat-openclaw pair       — generate a new pairing code + QR
+ *   npx @claw-os/clawchat install    — install plugin, configure, and show pairing QR
+ *   npx @claw-os/clawchat pair       — generate a new pairing code + QR
  */
 
 import crypto from "node:crypto";
@@ -37,7 +37,8 @@ const CONFIG_DIR = process.env.OPENCLAW_STATE_DIR
   : path.join(os.homedir(), ".openclaw");
 const CONFIG_PATH = path.join(CONFIG_DIR, "openclaw.json");
 const EXTENSIONS_DIR = path.join(CONFIG_DIR, "extensions");
-const PLUGIN_ID = "clawchat-openclaw";
+const PLUGIN_ID = "clawchat";
+const NPM_PACKAGE = "@claw-os/clawchat";
 const DEFAULT_RELAY = "wss://clawchat-production-db31.up.railway.app";
 
 function readConfig() {
@@ -126,10 +127,10 @@ async function install() {
   if (!fs.existsSync(pluginDir)) {
     console.log("  ⏳ Installing plugin...");
     try {
-      runCommand("openclaw", ["plugins", "install", PLUGIN_ID]);
+      runCommand("openclaw", ["plugins", "install", NPM_PACKAGE]);
     } catch {
       console.log("  ⚠ Auto-install failed. Run manually:");
-      console.log(`    openclaw plugins install ${PLUGIN_ID}`);
+      console.log(`    openclaw plugins install ${NPM_PACKAGE}`);
     }
   } else {
     console.log("  ✓ Plugin already installed");
@@ -165,7 +166,7 @@ async function install() {
   } catch {
     console.log("  ⚠ Could not restart gateway. Run manually:");
     console.log("    openclaw gateway restart");
-    console.log("  Then run: npx clawchat-openclaw pair");
+    console.log("  Then run: npx @claw-os/clawchat pair");
     console.log("");
     return;
   }
@@ -183,7 +184,7 @@ async function pair() {
   const config = readConfig();
   const entry = config.plugins?.entries?.[PLUGIN_ID];
   if (!entry?.config?.token) {
-    console.error("  Error: ClawChat not configured. Run: npx clawchat-openclaw install");
+    console.error("  Error: ClawChat not configured. Run: npx @claw-os/clawchat install");
     process.exit(1);
   }
   await showPairingQR(entry.config.relay || DEFAULT_RELAY, entry.config.token);
@@ -197,7 +198,7 @@ async function showPairingQR(relay, token) {
     const expires = new Date(data.expiresAt).toLocaleTimeString();
 
     console.log("");
-    console.log("  Scan with ClawChat app (请使用 ClawChat 扫码配对):");
+    console.log("  Scan with ClawOS app (请使用 ClawOS 扫码配对):");
     console.log("");
     await printQR(deepLink);
     console.log(`  Pairing Code : ${data.code}`);
@@ -206,7 +207,7 @@ async function showPairingQR(relay, token) {
   } catch (err) {
     console.error(`  ⚠ Could not get pairing code: ${err.message}`);
     console.log("  The relay may not have your gateway registered yet.");
-    console.log("  Restart the gateway first, then run: npx clawchat-openclaw pair");
+    console.log("  Restart the gateway first, then run: npx @claw-os/clawchat pair");
   }
 }
 
@@ -225,7 +226,7 @@ switch (command) {
     break;
   default:
     console.log("Usage:");
-    console.log("  npx clawchat-openclaw install  — install and configure");
-    console.log("  npx clawchat-openclaw pair     — generate pairing QR code");
+    console.log("  npx @claw-os/clawchat install  — install and configure");
+    console.log("  npx @claw-os/clawchat pair     — generate pairing QR code");
     process.exit(1);
 }
