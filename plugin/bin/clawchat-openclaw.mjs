@@ -12,7 +12,21 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
+
+// ---------------------------------------------------------------------------
+// Shell helper — same pattern as @larksuite/openclaw-lark-tools
+// ---------------------------------------------------------------------------
+
+function runCommand(command, args = []) {
+  const isWindows = os.platform() === "win32";
+  const { status, error } = spawnSync(command, args, {
+    stdio: "inherit",
+    shell: isWindows,
+  });
+  if (error) throw error;
+  if (status !== 0) throw new Error(`Command failed with exit code ${status}`);
+}
 
 // ---------------------------------------------------------------------------
 // Config helpers (read/write ~/.openclaw/openclaw.json directly)
@@ -112,10 +126,7 @@ async function install() {
   if (!fs.existsSync(pluginDir)) {
     console.log("  ⏳ Installing plugin...");
     try {
-      execSync(`openclaw plugins install ${PLUGIN_ID}`, {
-        stdio: "inherit",
-        shell: process.env.SHELL || true,
-      });
+      runCommand("openclaw", ["plugins", "install", PLUGIN_ID]);
     } catch {
       console.log("  ⚠ Auto-install failed. Run manually:");
       console.log(`    openclaw plugins install ${PLUGIN_ID}`);
@@ -149,7 +160,7 @@ async function install() {
   // 5. Restart gateway first (plugin must connect to relay before pairing)
   console.log("  ⏳ Restarting gateway...");
   try {
-    execSync("openclaw gateway restart", { stdio: "inherit", shell: process.env.SHELL || true });
+    runCommand("openclaw", ["gateway", "restart"]);
     console.log("  ✓ Gateway restarted");
   } catch {
     console.log("  ⚠ Could not restart gateway. Run manually:");
