@@ -3,10 +3,11 @@
  *
  * The relay exposes POST /api/pair/code (Bearer <gateway-token>).
  * Returns the 6-char display code (XXX-XXX) + relay URL for the user to
- * enter in the ClawChat iOS/Android app.
+ * enter in the ClawChat iOS/Android app. Also prints QR code to terminal.
  */
 
 import type { ClawChatAccount } from "./types.js";
+import { formatPairingBlock } from "./qr.js";
 
 export async function handlePairCommand(
   ctx: unknown,
@@ -31,6 +32,11 @@ export async function handlePairCommand(
     return { text: `Could not reach relay: ${String((err as Error)?.message ?? err)}` };
   }
 
+  // Print QR code to terminal
+  const expiresAtMs = new Date(data.expiresAt).getTime();
+  const block = formatPairingBlock(account.relay, data.code, expiresAtMs);
+  console.log(block);
+
   const expires = new Date(data.expiresAt).toLocaleTimeString();
   const lines = [
     "**ClawChat Pairing Code**",
@@ -40,8 +46,8 @@ export async function handlePairCommand(
     `Relay: \`${account.relay}\``,
     `Expires: ${expires}`,
     "",
-    "Open ClawChat app → Settings → Pair Gateway,",
-    "enter the relay URL and code above.",
+    "Scan the QR code in the terminal with ClawChat app,",
+    "or enter the relay URL and code manually.",
   ];
 
   return { text: lines.join("\n") };
