@@ -107,22 +107,7 @@ async function install() {
     console.log("  ✓ Using existing gateway token");
   }
 
-  // 3. Update config
-  entry.enabled = true;
-  entry.config.token = token;
-  if (!entry.config.relay) entry.config.relay = relay;
-  if (!entry.config.session) entry.config.session = "clawchat";
-  config.plugins.entries[PLUGIN_ID] = entry;
-
-  // Add to plugins.allow
-  if (!config.plugins.allow.includes(PLUGIN_ID)) {
-    config.plugins.allow.push(PLUGIN_ID);
-  }
-
-  writeConfig(config);
-  console.log("  ✓ Updated openclaw.json");
-
-  // 4. Install plugin via openclaw CLI
+  // 3. Install plugin via openclaw CLI first (it writes config too)
   const pluginDir = path.join(EXTENSIONS_DIR, PLUGIN_ID);
   if (!fs.existsSync(pluginDir)) {
     console.log("  ⏳ Installing plugin...");
@@ -138,12 +123,41 @@ async function install() {
     console.log("  ✓ Plugin already installed");
   }
 
+  // 4. Re-read config (openclaw install may have modified it), then apply our settings
+  const freshConfig = readConfig();
+  if (!freshConfig.plugins) freshConfig.plugins = {};
+  if (!freshConfig.plugins.entries) freshConfig.plugins.entries = {};
+  if (!freshConfig.plugins.allow) freshConfig.plugins.allow = [];
+
+  let freshEntry = freshConfig.plugins.entries[PLUGIN_ID] ?? {};
+  if (!freshEntry.config) freshEntry.config = {};
+  freshEntry.enabled = true;
+  freshEntry.config.token = token;
+  if (!freshEntry.config.relay) freshEntry.config.relay = relay;
+  if (!freshEntry.config.session) freshEntry.config.session = "clawchat";
+  freshConfig.plugins.entries[PLUGIN_ID] = freshEntry;
+
+  // Add to plugins.allow
+  if (!freshConfig.plugins.allow.includes(PLUGIN_ID)) {
+    freshConfig.plugins.allow.push(PLUGIN_ID);
+  }
+
+  writeConfig(freshConfig);
+  console.log("  ✓ Updated openclaw.json");
+
   // 5. Get pairing code and show QR
   await showPairingQR(relay, token);
 
+  // 6. Restart gateway
   console.log("");
-  console.log("  Next: restart the gateway to load the plugin:");
-  console.log("    openclaw gateway restart");
+  console.log("  ⏳ Restarting gateway...");
+  try {
+    execSync("openclaw gateway restart", { stdio: "inherit" });
+    console.log("  ✓ Gateway restarted");
+  } catch {
+    console.log("  ⚠ Could not restart gateway. Run manually:");
+    console.log("    openclaw gateway restart");
+  }
   console.log("");
 }
 
