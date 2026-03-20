@@ -8,11 +8,15 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "bin": {
+    "clawchat-openclaw": "bin/clawchat-openclaw.mjs"
+  },
   "openclaw": {
     "extensions": ["./src/index.ts"]
   },
   "files": [
     "src",
+    "bin",
     "openclaw.plugin.json"
   ],
   "scripts": {
