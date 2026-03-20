@@ -1,11 +1,11 @@
-# clawchat-plugin
+# clawchat
 
 ClawChat channel plugin for [OpenClaw](https://github.com/openclaw/openclaw). Connects your OpenClaw agent to the ClawChat relay so iOS/Android apps can chat with it.
 
 ## Install
 
 ```bash
-openclaw plugins install clawchat-plugin
+openclaw plugins install clawchat
 ```
 
 Restart OpenClaw after installing. The plugin auto-generates a gateway token and prints a **QR code** to the terminal for pairing.
