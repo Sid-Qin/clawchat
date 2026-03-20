@@ -66,6 +66,9 @@ struct ClawOSApp: App {
                     withAnimation { appState.showPairing = false }
                 }
             }
+            .onOpenURL { url in
+                handleDeepLink(url)
+            }
         }
     }
 
@@ -101,4 +104,20 @@ struct ClawOSApp: App {
             withAnimation { appState.showPairing = true }
         }
     }
+
+    private func handleDeepLink(_ url: URL) {
+        guard let parsed = PairingDeepLink.parse(url) else { return }
+        // Show pairing overlay and auto-fill
+        withAnimation { appState.showPairing = true }
+        // Post notification so PairingCardView can pick it up
+        NotificationCenter.default.post(
+            name: .clawChatDeepLink,
+            object: nil,
+            userInfo: ["relay": parsed.relay, "code": parsed.code]
+        )
+    }
+}
+
+extension Notification.Name {
+    static let clawChatDeepLink = Notification.Name("clawChatDeepLink")
 }
