@@ -1,13 +1,10 @@
 /**
- * /clawchat pair — fetch a pairing code from the relay via HTTP and return it.
- *
- * The relay exposes POST /api/pair/code (Bearer <gateway-token>).
- * Returns the 6-char display code (XXX-XXX) + relay URL for the user to
- * enter in the ClawChat iOS/Android app. Also prints QR code to terminal.
+ * /clawchat pair — fetch a pairing code from the relay via HTTP and return
+ * an ASCII QR code in the chat response (same pattern as device-pair plugin).
  */
 
 import type { ClawChatAccount } from "./types.js";
-import { formatPairingBlock } from "./qr.js";
+import { buildDeepLink, renderQrAscii } from "./qr.js";
 
 export async function handlePairCommand(
   ctx: unknown,
@@ -32,19 +29,20 @@ export async function handlePairCommand(
     return { text: `Could not reach relay: ${String((err as Error)?.message ?? err)}` };
   }
 
-  const expiresAtMs = new Date(data.expiresAt).getTime();
-
+  const deepLink = buildDeepLink(account.relay, data.code);
+  const qrAscii = await renderQrAscii(deepLink);
   const expires = new Date(data.expiresAt).toLocaleTimeString();
+
   const lines = [
-    "**ClawChat Pairing Code**",
+    "Scan this QR code with the ClawChat app:",
     "",
-    `\`${data.code}\``,
+    "```",
+    qrAscii,
+    "```",
     "",
+    `Pairing Code: \`${data.code}\``,
     `Relay: \`${account.relay}\``,
     `Expires: ${expires}`,
-    "",
-    "Scan the QR code in the terminal with ClawChat app,",
-    "or enter the relay URL and code manually.",
   ];
 
   return { text: lines.join("\n") };

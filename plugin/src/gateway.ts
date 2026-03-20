@@ -8,7 +8,7 @@
 
 import crypto from "node:crypto";
 import { getClawChatRuntime } from "./runtime.js";
-import { formatPairingBlock } from "./qr.js";
+import { buildDeepLink, renderQrAscii } from "./qr.js";
 import type { ClawChatAccount } from "./types.js";
 
 const CHANNEL_ID = "clawchat";
@@ -80,7 +80,6 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
 
   let relayWs: WebSocket | null = null;
   let relayReady = false;
-  let qrPrinted = false;
   let pairingTimer: ReturnType<typeof setInterval> | null = null;
   let pingTimer: ReturnType<typeof setInterval> | null = null;
   let pongTimer: ReturnType<typeof setTimeout> | null = null;
@@ -158,16 +157,6 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
 
       case "pair.code":
         log?.info?.(`[clawchat] Pairing code: ${msg.code} (expires ${new Date(msg.expiresAt).toLocaleTimeString()})`);
-        // Print QR code to terminal on first pairing code
-        if (!qrPrinted) {
-          qrPrinted = true;
-          try {
-            const block = formatPairingBlock(relayUrl, msg.code, msg.expiresAt);
-            process.stdout.write(block + "\n");
-          } catch (err) {
-            log?.warn?.(`[clawchat] Failed to generate QR code: ${String(err)}`);
-          }
-        }
         break;
 
       case "app.paired":
