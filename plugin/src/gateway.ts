@@ -162,7 +162,10 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
         if (!qrPrinted) {
           qrPrinted = true;
           const block = formatPairingBlock(relayUrl, msg.code, msg.expiresAt);
-          console.log(block);
+          // Use both console.log and logger to ensure visibility
+          for (const line of block.split("\n")) {
+            log?.info?.(line);
+          }
         }
         break;
 

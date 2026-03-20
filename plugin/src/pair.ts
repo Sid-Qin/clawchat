@@ -32,10 +32,7 @@ export async function handlePairCommand(
     return { text: `Could not reach relay: ${String((err as Error)?.message ?? err)}` };
   }
 
-  // Print QR code to terminal
   const expiresAtMs = new Date(data.expiresAt).getTime();
-  const block = formatPairingBlock(account.relay, data.code, expiresAtMs);
-  console.log(block);
 
   const expires = new Date(data.expiresAt).toLocaleTimeString();
   const lines = [
