@@ -161,10 +161,11 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
         // Print QR code to terminal on first pairing code
         if (!qrPrinted) {
           qrPrinted = true;
-          const block = formatPairingBlock(relayUrl, msg.code, msg.expiresAt);
-          // Use both console.log and logger to ensure visibility
-          for (const line of block.split("\n")) {
-            log?.info?.(line);
+          try {
+            const block = formatPairingBlock(relayUrl, msg.code, msg.expiresAt);
+            process.stdout.write(block + "\n");
+          } catch (err) {
+            log?.warn?.(`[clawchat] Failed to generate QR code: ${String(err)}`);
           }
         }
         break;
