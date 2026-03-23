@@ -62,7 +62,7 @@ struct TypingBreathingDotsView: View {
     }
 }
 
-struct MessageBubbleItem: Identifiable {
+struct MessageBubbleItem: Identifiable, Equatable {
     let id: String
     let role: MessageRole
     let text: String
@@ -71,6 +71,7 @@ struct MessageBubbleItem: Identifiable {
     let toolEvents: [ChatToolEvent]
     let isStreaming: Bool
     let isError: Bool
+    let timestamp: Date
 
     init(
         id: String,
@@ -80,7 +81,8 @@ struct MessageBubbleItem: Identifiable {
         attachments: [StoredMessageAttachment],
         toolEvents: [ChatToolEvent],
         isStreaming: Bool,
-        isError: Bool
+        isError: Bool,
+        timestamp: Date
     ) {
         self.id = id
         self.role = role
@@ -90,6 +92,7 @@ struct MessageBubbleItem: Identifiable {
         self.toolEvents = toolEvents
         self.isStreaming = isStreaming
         self.isError = isError
+        self.timestamp = timestamp
     }
 
     init(chatMessage: ChatMessage) {
@@ -101,6 +104,7 @@ struct MessageBubbleItem: Identifiable {
         toolEvents = chatMessage.toolEvents
         isStreaming = chatMessage.isStreaming
         isError = chatMessage.isError
+        timestamp = chatMessage.timestamp
     }
 
     init(storedMessage: StoredMessage) {
@@ -112,6 +116,38 @@ struct MessageBubbleItem: Identifiable {
         toolEvents = []
         isStreaming = false
         isError = false
+        timestamp = storedMessage.timestamp
+    }
+
+    static func == (lhs: MessageBubbleItem, rhs: MessageBubbleItem) -> Bool {
+        lhs.id == rhs.id &&
+        rolesEqual(lhs.role, rhs.role) &&
+        lhs.text == rhs.text &&
+        lhs.reasoning == rhs.reasoning &&
+        lhs.attachments == rhs.attachments &&
+        lhs.isStreaming == rhs.isStreaming &&
+        lhs.isError == rhs.isError &&
+        lhs.timestamp == rhs.timestamp &&
+        toolEventsEqual(lhs.toolEvents, rhs.toolEvents)
+    }
+
+    private static func rolesEqual(_ lhs: MessageRole, _ rhs: MessageRole) -> Bool {
+        switch (lhs, rhs) {
+        case (.user, .user), (.assistant, .assistant):
+            true
+        default:
+            false
+        }
+    }
+
+    private static func toolEventsEqual(_ lhs: [ChatToolEvent], _ rhs: [ChatToolEvent]) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+        return zip(lhs, rhs).allSatisfy { left, right in
+            left.id == right.id &&
+            left.tool == right.tool &&
+            left.phase.rawValue == right.phase.rawValue &&
+            left.label == right.label
+        }
     }
 }
 
@@ -120,83 +156,59 @@ struct MessageBubbleView: View {
     var theme: AppVisualTheme
 
     private let bubbleRadius: CGFloat = 22
+    private var isUser: Bool { item.role == .user }
+
+    private var timeString: String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: item.timestamp)
+    }
 
     var body: some View {
-        switch item.role {
-        case .user:
-            userBubble
-        case .assistant:
-            agentBubble
-        }
-    }
-
-    private var userBubble: some View {
         HStack(alignment: .bottom) {
-            Spacer(minLength: 64)
+            if isUser { Spacer(minLength: 64) }
 
-            VStack(alignment: .leading, spacing: 8) {
-                if !item.attachments.isEmpty {
-                    attachmentList(isUserBubble: true)
-                }
-
-                if !item.text.isEmpty {
-                    Text(item.text)
-                        .font(.body)
-                        .lineSpacing(2)
-                        .foregroundStyle(.white)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
-            .background(
-                RoundedRectangle(cornerRadius: bubbleRadius, style: .continuous)
-                    .fill(theme.accent)
-            )
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 4)
-    }
-
-    private var agentBubble: some View {
-        HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 8) {
-                if let reasoning = item.reasoning, !reasoning.isEmpty {
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
+                if let reasoning = item.reasoning, !reasoning.isEmpty, !isUser {
                     reasoningBlock(reasoning)
                 }
 
-                if !item.toolEvents.isEmpty {
+                if !item.toolEvents.isEmpty, !isUser {
                     toolEventsBlock
                 }
 
                 if !item.attachments.isEmpty {
-                    attachmentList(isUserBubble: false)
+                    attachmentList(isUserBubble: isUser)
                 }
 
-                if item.isStreaming && item.text.isEmpty {
+                if !isUser && item.isStreaming && item.text.isEmpty {
                     TypingBreathingDotsView()
                         .padding(.vertical, 2)
                 } else if !item.text.isEmpty {
                     Text(item.text)
                         .font(.body)
                         .lineSpacing(2)
-                        .foregroundStyle(item.isError ? .red : .primary)
+                        .foregroundStyle(isUser ? .white : (item.isError ? .red : .primary))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+
+                Text(timeString)
+                    .font(.caption2)
+                    .foregroundStyle(isUser ? Color.white.opacity(0.7) : .secondary)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 11)
             .background(
                 RoundedRectangle(cornerRadius: bubbleRadius, style: .continuous)
-                    .fill(Color(.systemGray5))
+                    .fill(isUser ? theme.accent : Color(.systemGray5))
             )
 
-            Spacer(minLength: 64)
+            if !isUser { Spacer(minLength: 64) }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .padding(.bottom, 8)
+        .padding(.top, isUser ? 12 : 4)
+        .padding(.bottom, isUser ? 4 : 8)
     }
 
     private func reasoningBlock(_ text: String) -> some View {
@@ -273,6 +285,20 @@ struct MessageBubbleView: View {
                 .font(.caption2)
                 .foregroundStyle(.red)
         }
+    }
+}
+
+struct EquatableMessageBubbleRow: View, Equatable {
+    let item: MessageBubbleItem
+    let theme: AppVisualTheme
+    let themeKey: String
+
+    static func == (lhs: EquatableMessageBubbleRow, rhs: EquatableMessageBubbleRow) -> Bool {
+        lhs.item == rhs.item && lhs.themeKey == rhs.themeKey
+    }
+
+    var body: some View {
+        MessageBubbleView(item: item, theme: theme)
     }
 }
 

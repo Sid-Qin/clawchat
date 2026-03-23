@@ -9,6 +9,11 @@
 import crypto from "node:crypto";
 import { getClawChatRuntime } from "./runtime.js";
 import { buildDeepLink, renderQrAscii } from "./qr.js";
+import {
+  buildReplyStreamMessages,
+  buildToolResultEvent,
+  buildTypingEvent,
+} from "./reply-routing.js";
 import type { ClawChatAccount } from "./types.js";
 
 const CHANNEL_ID = "clawchat";
@@ -199,8 +204,12 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
   async function handleInbound(msg: any) {
     log?.info?.(`[clawchat] handleInbound: text="${(msg.text || "").slice(0, 50)}" from=${msg.deviceId ?? msg.from ?? "?"}`);
     const rt = getClawChatRuntime();
+    const route = {
+      agentId: msg.agentId ?? "default",
+      sessionKey: msg.sessionKey ?? undefined,
+    };
 
-    send({ type: "typing", id: crypto.randomUUID(), ts: Date.now(), active: true });
+    send(buildTypingEvent({ ...route, active: true }));
 
     const relayMessageId = crypto.randomUUID();
     const senderId = msg.deviceId ?? msg.from ?? "app";
@@ -211,7 +220,7 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
       CommandBody: msg.text || "",
       From: `${CHANNEL_ID}:${senderId}`,
       To: `${CHANNEL_ID}:${senderId}`,
-      SessionKey: sessionKey,
+      SessionKey: msg.sessionKey ?? sessionKey,
       AccountId: ctx.accountId,
       OriginatingChannel: CHANNEL_ID,
       OriginatingTo: `${CHANNEL_ID}:${senderId}`,
@@ -236,36 +245,16 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
 
             if (info?.kind === "tool" && text) {
               // Forward tool output as tool.event
-              send({
-                type: "tool.event",
-                id: crypto.randomUUID(),
-                ts: Date.now(),
-                tool: "tool",
-                phase: "result",
-                label: "Tool",
-                result: text,
-              });
+              send(buildToolResultEvent({ ...route, text }));
               return;
             }
 
             if (!text) return;
 
             // Send streaming first to create the message, then done to finalize
-            send({
-              type: "message.stream",
-              id: relayMessageId,
-              ts: Date.now(),
-              delta: text,
-              phase: "streaming",
-            });
-            send({
-              type: "message.stream",
-              id: relayMessageId,
-              ts: Date.now(),
-              delta: "",
-              phase: "done",
-              finalText: text,
-            });
+            for (const payload of buildReplyStreamMessages({ ...route, relayMessageId, text })) {
+              send(payload);
+            }
           },
           onReplyStart: () => {
             log?.info?.("[clawchat] Agent reply starting");
@@ -276,10 +265,20 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
         },
       });
       log?.info?.("[clawchat] dispatch completed");
+      if (relayReady) {
+        send(buildTypingEvent({ ...route, active: false }));
+      }
     } catch (err) {
       log?.error?.(`[clawchat] Failed to dispatch inbound: ${String((err as Error)?.message ?? err)}`);
       if (relayReady) {
-        send({ type: "message.stream", id: relayMessageId, ts: Date.now(), delta: "", phase: "done", finalText: "Sorry, something went wrong." });
+        for (const payload of buildReplyStreamMessages({
+          ...route,
+          relayMessageId,
+          text: "Sorry, something went wrong.",
+        })) {
+          send(payload);
+        }
+        send(buildTypingEvent({ ...route, active: false }));
       }
     }
   }

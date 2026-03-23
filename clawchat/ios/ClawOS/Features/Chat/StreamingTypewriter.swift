@@ -3,7 +3,7 @@ import Foundation
 enum StreamingTypewriter {
     static let charactersPerTick = 2
     static let tickIntervalMilliseconds = 40
-    static let followScrollDelayMilliseconds = 12
+    static let followScrollDelayMilliseconds = 80
     static let tickInterval: Duration = .milliseconds(tickIntervalMilliseconds)
     static let followScrollDelay: Duration = .milliseconds(followScrollDelayMilliseconds)
 

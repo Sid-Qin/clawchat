@@ -10,6 +10,7 @@ export type PresenceStatus = "online" | "away" | "offline";
 export interface Typing extends BaseMessage {
   type: "typing";
   agentId: string;
+  sessionKey?: string;
   active: boolean;
   /** More specific status text (e.g. "Thinking...") */
   label?: string;

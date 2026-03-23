@@ -118,6 +118,7 @@ export interface MessageOutbound extends BaseMessage {
   content: OutboundContent;
   replyTo?: string;
   threadId?: string;
+  sessionKey?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,6 +131,7 @@ export type StreamPhase = "streaming" | "done" | "error";
 export interface MessageStream extends BaseMessage {
   type: "message.stream";
   agentId?: string;
+  sessionKey?: string;
   delta: string;
   phase: StreamPhase;
   /** Full text for reconciliation (present when phase is "done") */
@@ -146,6 +148,7 @@ export type ReasoningPhase = "streaming" | "done";
 export interface MessageReasoning extends BaseMessage {
   type: "message.reasoning";
   agentId: string;
+  sessionKey?: string;
   text: string;
   phase: ReasoningPhase;
 }
@@ -160,6 +163,7 @@ export type ToolPhase = "start" | "progress" | "result" | "error";
 export interface ToolEvent extends BaseMessage {
   type: "tool.event";
   agentId: string;
+  sessionKey?: string;
   /** Tool name (e.g. exec, read, write, edit) */
   tool: string;
   phase: ToolPhase;

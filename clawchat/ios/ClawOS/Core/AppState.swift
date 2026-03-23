@@ -14,6 +14,7 @@ final class AppState {
     private static let messagesKey = "clawos_messages"
     private static let themeKey = "clawos_theme"
     private static let agentAvatarsKey = "clawos_agent_avatars"
+    private static let stripPrefix = "clawos_strip_"
 
     var agents: [Agent] = []
     var gateways: [Gateway] = []
@@ -24,9 +25,19 @@ final class AppState {
 
     private(set) var messagesBySession: [String: [StoredMessage]] = [:]
     private var chatScrollAnchorsBySession: [String: String] = [:]
+    private let messagePersistenceQueue = DispatchQueue(
+        label: "clawos.message-persistence",
+        qos: .utility
+    )
+    private var latestMessagesPersistenceRevision = 0
 
     var selectedAgentId: String = ""
     var selectedGatewayId: String = ""
+    var agentStripItems: [AgentStripItem] = [] {
+        didSet { persistStripItems() }
+    }
+    var selectedStripItemId: String = ""
+    private var preferredAgentByGroupId: [String: String] = [:]
     var selectedMoment: MockMoment?
     var selectedVisualThemeID: AppVisualThemeID = .eva00 {
         didSet {
@@ -71,11 +82,22 @@ final class AppState {
 
     func selectGateway(_ id: String) {
         selectedGatewayId = id
+        loadStripItems()
         let visible = currentGatewayAgents
         if !visible.contains(where: { $0.id == selectedAgentId }),
            let first = visible.first {
             selectedAgentId = first.id
         }
+    }
+
+    var selectedAgentIds: [String] {
+        guard !selectedStripItemId.isEmpty else {
+            return currentGatewayAgents.map(\.id)
+        }
+        if let item = agentStripItems.first(where: { $0.id == selectedStripItemId }) {
+            return item.containedAgentIds
+        }
+        return currentGatewayAgents.map(\.id)
     }
 
     func agent(for id: String) -> Agent? {
@@ -84,6 +106,140 @@ final class AppState {
 
     func sessions(for agentId: String) -> [Session] {
         sessions.filter { $0.agentId == agentId }
+    }
+
+    // MARK: - Agent Strip Management
+
+    func selectStripItem(_ itemId: String) {
+        selectedStripItemId = itemId
+        if let item = agentStripItems.first(where: { $0.id == itemId }) {
+            if case .single(let agentId) = item {
+                selectedAgentId = agentId
+            } else if case .group(let group) = item,
+                      let resolved = resolvedAgentID(for: group, groupItemId: itemId) {
+                selectedAgentId = resolved
+            }
+        }
+    }
+
+    func selectAgentInGroup(_ agentId: String, groupItemId: String) {
+        guard let item = agentStripItems.first(where: { $0.id == groupItemId }),
+              case .group(let group) = item,
+              group.agentIds.contains(agentId) else { return }
+
+        selectedStripItemId = groupItemId
+        selectedAgentId = agentId
+        preferredAgentByGroupId[groupItemId] = agentId
+    }
+
+    func preferredAgentInGroup(_ groupItemId: String) -> String? {
+        guard let preferred = preferredAgentByGroupId[groupItemId],
+              let item = agentStripItems.first(where: { $0.id == groupItemId }),
+              case .group(let group) = item,
+              group.agentIds.contains(preferred) else { return nil }
+        return preferred
+    }
+
+    func moveStripItem(fromIndex: Int, toFinalIndex: Int) {
+        guard agentStripItems.indices.contains(fromIndex),
+              fromIndex != toFinalIndex else { return }
+
+        let item = agentStripItems.remove(at: fromIndex)
+        let insertAt = min(max(0, toFinalIndex), agentStripItems.count)
+        agentStripItems.insert(item, at: insertAt)
+    }
+
+    func mergeStripItems(sourceId: String, targetId: String) {
+        guard let srcIdx = agentStripItems.firstIndex(where: { $0.id == sourceId }),
+              let tgtIdx = agentStripItems.firstIndex(where: { $0.id == targetId }),
+              srcIdx != tgtIdx else { return }
+
+        let sourceIds = agentStripItems[srcIdx].containedAgentIds
+        let targetItem = agentStripItems[tgtIdx]
+
+        switch targetItem {
+        case .single(let targetAgentId):
+            let group = AgentGroup(agentIds: [targetAgentId] + sourceIds)
+            agentStripItems[tgtIdx] = .group(group)
+        case .group(var group):
+            group.agentIds.append(contentsOf: sourceIds)
+            agentStripItems[tgtIdx] = .group(group)
+        }
+
+        agentStripItems.remove(at: srcIdx)
+        cleanupPreferredAgents()
+        selectedStripItemId = agentStripItems[min(tgtIdx, agentStripItems.count - 1)].id
+    }
+
+    func ungroupAgent(_ agentId: String, from groupId: String) {
+        guard let idx = agentStripItems.firstIndex(where: { $0.id == groupId }),
+              case .group(var group) = agentStripItems[idx] else { return }
+
+        group.agentIds.removeAll { $0 == agentId }
+
+        if group.agentIds.count <= 1 {
+            if let remainingId = group.agentIds.first {
+                agentStripItems[idx] = .single(agentId: remainingId)
+            } else {
+                agentStripItems.remove(at: idx)
+            }
+        } else {
+            agentStripItems[idx] = .group(group)
+        }
+
+        agentStripItems.insert(.single(agentId: agentId), at: min(idx + 1, agentStripItems.count))
+        cleanupPreferredAgents()
+    }
+
+    func dissolveGroup(_ groupId: String) {
+        guard let idx = agentStripItems.firstIndex(where: { $0.id == groupId }),
+              case .group(let group) = agentStripItems[idx] else { return }
+
+        agentStripItems.remove(at: idx)
+        for (offset, agentId) in group.agentIds.enumerated() {
+            agentStripItems.insert(.single(agentId: agentId), at: min(idx + offset, agentStripItems.count))
+        }
+        cleanupPreferredAgents()
+    }
+
+    func renameGroup(_ groupId: String, to newName: String) {
+        guard let idx = agentStripItems.firstIndex(where: { $0.id == groupId }),
+              case .group(var group) = agentStripItems[idx] else { return }
+        group.name = AgentGroup.normalizedName(newName)
+        agentStripItems[idx] = .group(group)
+    }
+
+    func syncStripItems() {
+        let gwAgentIds = Set(currentGatewayAgents.map(\.id))
+        var knownIds = Set<String>()
+
+        var cleaned = agentStripItems.compactMap { item -> AgentStripItem? in
+            switch item {
+            case .single(let agentId):
+                guard gwAgentIds.contains(agentId) else { return nil }
+                knownIds.insert(agentId)
+                return item
+            case .group(var group):
+                group.name = AgentGroup.normalizedName(group.name)
+                group.agentIds = group.agentIds.filter { gwAgentIds.contains($0) }
+                group.agentIds.forEach { knownIds.insert($0) }
+                if group.agentIds.isEmpty { return nil }
+                if group.agentIds.count == 1 { return .single(agentId: group.agentIds[0]) }
+                return .group(group)
+            }
+        }
+
+        for agent in currentGatewayAgents where !knownIds.contains(agent.id) {
+            cleaned.append(.single(agentId: agent.id))
+        }
+
+        agentStripItems = cleaned
+        cleanupPreferredAgents()
+
+        if !agentStripItems.contains(where: { $0.id == selectedStripItemId }),
+           let first = agentStripItems.first {
+            selectedStripItemId = first.id
+        }
     }
 
     // MARK: - Populate from ClawChatManager
@@ -168,6 +324,8 @@ final class AppState {
         } else if selectedAgentId.isEmpty, let first = gatewayAgents.first {
             selectedAgentId = first.id
         }
+
+        loadStripItems()
     }
 
     func createSession(for agentId: String, title: String = "新对话") -> Session {
@@ -287,13 +445,24 @@ final class AppState {
         guard let data = UserDefaults.standard.data(forKey: Self.sessionsKey),
               let saved = try? JSONDecoder().decode([Session].self, from: data) else { return }
         sessions = saved
+        persistSessions()
     }
 
     // MARK: - Message Persistence
 
     private func persistMessages() {
-        if let data = try? JSONEncoder().encode(messagesBySession) {
-            UserDefaults.standard.set(data, forKey: Self.messagesKey)
+        let snapshot = messagesBySession
+        latestMessagesPersistenceRevision += 1
+        let revision = latestMessagesPersistenceRevision
+
+        messagePersistenceQueue.async {
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard self.latestMessagesPersistenceRevision == revision else { return }
+                UserDefaults.standard.set(data, forKey: Self.messagesKey)
+            }
         }
     }
 
@@ -318,12 +487,49 @@ final class AppState {
         return map
     }
 
+    // MARK: - Strip Persistence
+
+    private func persistStripItems() {
+        guard !selectedGatewayId.isEmpty else { return }
+        let key = Self.stripPrefix + selectedGatewayId
+        if let data = try? JSONEncoder().encode(agentStripItems) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    func loadStripItems() {
+        guard !selectedGatewayId.isEmpty else { return }
+        let key = Self.stripPrefix + selectedGatewayId
+        if let data = UserDefaults.standard.data(forKey: key),
+           let saved = try? JSONDecoder().decode([AgentStripItem].self, from: data) {
+            agentStripItems = saved
+        } else {
+            agentStripItems = []
+        }
+        syncStripItems()
+    }
+
     // MARK: - Theme Persistence
 
     private func loadTheme() {
         guard let raw = UserDefaults.standard.string(forKey: Self.themeKey),
               let theme = AppVisualThemeID(rawValue: raw) else { return }
         selectedVisualThemeID = theme
+    }
+
+    private func resolvedAgentID(for group: AgentGroup, groupItemId: String) -> String? {
+        if let preferred = preferredAgentByGroupId[groupItemId], group.agentIds.contains(preferred) {
+            return preferred
+        }
+        return group.agentIds.first
+    }
+
+    private func cleanupPreferredAgents() {
+        preferredAgentByGroupId = preferredAgentByGroupId.filter { groupItemId, preferredAgentId in
+            guard let item = agentStripItems.first(where: { $0.id == groupItemId }),
+                  case .group(let group) = item else { return false }
+            return group.agentIds.contains(preferredAgentId)
+        }
     }
 
     private func parseAgentDescriptor(_ rawValue: String, meta: AgentMeta?) -> ParsedAgentDescriptor {

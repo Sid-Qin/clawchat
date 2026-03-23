@@ -46,7 +46,7 @@ struct PairingOverlay: View {
 
 struct PairingCardView: View {
     @Environment(AppState.self) private var appState
-    @State private var relayUrl = ""
+    @State private var relayUrl = "ws://192.168.120.142:8787"
     @State private var pairingCode = ""
     @State private var isPairing = false
     @State private var errorMessage: String?
@@ -69,31 +69,32 @@ struct PairingCardView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            headerArea
-                .padding(.top, 32)
-                .padding(.bottom, 28)
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 0) {
+                headerArea
+                    .padding(.top, 32)
+                    .padding(.bottom, 28)
 
-            formArea
-                .padding(.horizontal, 24)
-
-            if let errorMessage {
-                errorBanner(errorMessage)
+                formArea
                     .padding(.horizontal, 24)
-                    .padding(.top, 16)
+
+                if let errorMessage {
+                    errorBanner(errorMessage)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 16)
+                }
+
+                buttonArea
+                    .padding(.horizontal, 24)
+                    .padding(.top, 32)
+                    .padding(.bottom, 12)
             }
+            .padding(.bottom, 20)
 
-            buttonArea
-                .padding(.horizontal, 24)
-                .padding(.top, 32)
-                .padding(.bottom, 12)
-
-            if appState.clawChatManager.isPaired {
-                cancelButton
-                    .padding(.bottom, 8)
+            if appState.clawChatManager.isPaired || !appState.gateways.isEmpty {
+                closeButton
             }
         }
-        .padding(.bottom, 20)
         .background(
             RoundedRectangle(cornerRadius: 36, style: .continuous)
                 .fill(.regularMaterial)
@@ -273,18 +274,24 @@ struct PairingCardView: View {
         }
     }
 
-    private var cancelButton: some View {
+    private var closeButton: some View {
         Button {
             hideKeyboard()
             withAnimation { appState.showPairing = false }
         } label: {
-            Text("取消")
-                .font(.subheadline.weight(.medium))
+            Image(systemName: "xmark")
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                .frame(height: 40)
+                .frame(width: 32, height: 32)
+                .background(.regularMaterial, in: Circle())
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
+                        .blendMode(.overlay)
+                )
         }
         .buttonStyle(.plain)
+        .padding(16)
     }
 
     // MARK: - Error

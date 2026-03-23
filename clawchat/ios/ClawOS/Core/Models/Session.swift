@@ -3,12 +3,77 @@ import Foundation
 struct Session: Identifiable, Codable, Hashable {
     let id: String
     var agentId: String
+    var sessionKey: String
     var title: String
     var category: String
     var lastMessage: String?
     var lastMessageTime: Date?
     var unreadCount: Int
     var isPinned: Bool = false
+
+    init(
+        id: String,
+        agentId: String,
+        sessionKey: String? = nil,
+        title: String,
+        category: String,
+        lastMessage: String?,
+        lastMessageTime: Date?,
+        unreadCount: Int,
+        isPinned: Bool = false
+    ) {
+        self.id = id
+        self.agentId = agentId
+        self.sessionKey = sessionKey ?? Self.generatedSessionKey(for: id)
+        self.title = title
+        self.category = category
+        self.lastMessage = lastMessage
+        self.lastMessageTime = lastMessageTime
+        self.unreadCount = unreadCount
+        self.isPinned = isPinned
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case agentId
+        case sessionKey
+        case title
+        case category
+        case lastMessage
+        case lastMessageTime
+        case unreadCount
+        case isPinned
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        agentId = try container.decode(String.self, forKey: .agentId)
+        sessionKey = try container.decodeIfPresent(String.self, forKey: .sessionKey) ?? Self.generatedSessionKey(for: id)
+        title = try container.decode(String.self, forKey: .title)
+        category = try container.decode(String.self, forKey: .category)
+        lastMessage = try container.decodeIfPresent(String.self, forKey: .lastMessage)
+        lastMessageTime = try container.decodeIfPresent(Date.self, forKey: .lastMessageTime)
+        unreadCount = try container.decode(Int.self, forKey: .unreadCount)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(agentId, forKey: .agentId)
+        try container.encode(sessionKey, forKey: .sessionKey)
+        try container.encode(title, forKey: .title)
+        try container.encode(category, forKey: .category)
+        try container.encodeIfPresent(lastMessage, forKey: .lastMessage)
+        try container.encodeIfPresent(lastMessageTime, forKey: .lastMessageTime)
+        try container.encode(unreadCount, forKey: .unreadCount)
+        try container.encode(isPinned, forKey: .isPinned)
+    }
+
+    private static func generatedSessionKey(for sessionId: String) -> String {
+        "clawchat:ios:session:\(sessionId)"
+    }
 
     var timeAgo: String {
         guard let time = lastMessageTime else { return "" }

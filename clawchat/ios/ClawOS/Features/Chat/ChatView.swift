@@ -5,6 +5,68 @@ import PhotosUI
 import UniformTypeIdentifiers
 import Speech
 
+struct ChatMessageListContent: View, Equatable {
+    let messages: [MessageBubbleItem]
+    let isTyping: Bool
+    let theme: AppVisualTheme
+    let themeKey: String
+    let shouldMeasure: Bool
+    let coordinateSpaceName: String
+
+    static func == (lhs: ChatMessageListContent, rhs: ChatMessageListContent) -> Bool {
+        lhs.isTyping == rhs.isTyping &&
+        lhs.themeKey == rhs.themeKey &&
+        lhs.shouldMeasure == rhs.shouldMeasure &&
+        lhs.coordinateSpaceName == rhs.coordinateSpaceName &&
+        lhs.messages == rhs.messages
+    }
+
+    var body: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(messages) { message in
+                EquatableMessageBubbleRow(
+                    item: message,
+                    theme: theme,
+                    themeKey: themeKey
+                )
+                .id(message.id)
+                .background {
+                    if shouldMeasure {
+                        GeometryReader { geometry in
+                            Color.clear
+                                .preference(
+                                    key: ChatMessageFramePreferenceKey.self,
+                                    value: [message.id: geometry.frame(in: .named(coordinateSpaceName))]
+                                )
+                        }
+                    }
+                }
+            }
+
+            if isTyping {
+                HStack(alignment: .bottom) {
+                    TypingBreathingDotsView()
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .fill(Color(.systemGray5))
+                        )
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+            }
+
+            Color.clear
+                .frame(height: 1)
+                .id("bottom")
+        }
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+    }
+}
+
 struct ChatView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -91,14 +153,24 @@ struct ChatView: View {
         appState.messages(for: session.id)
     }
 
+    private var sessionLiveMessages: [ChatMessage] {
+        chatManager.liveMessages(for: session.agentId, sessionKey: session.sessionKey)
+    }
+
+    private var isSessionTyping: Bool {
+        chatManager.isTyping(for: session.agentId, sessionKey: session.sessionKey)
+    }
+
     private var previewAssistantMessage: ChatMessage? {
         let storedIds = Set(storedMessages.map(\.id))
-        let agentId = session.agentId
-        return chatManager.liveMessages.last(where: {
+        return sessionLiveMessages.last(where: {
             $0.role == .assistant
             && !storedIds.contains($0.id)
-            && ($0.agentId == nil || $0.agentId == agentId)
         })
+    }
+
+    private var hasTransientAssistantPreview: Bool {
+        previewAssistantMessage != nil || streamingDisplayMessageId != nil
     }
 
     private var renderedMessages: [MessageBubbleItem] {
@@ -115,6 +187,17 @@ struct ChatView: View {
 
     private var messageScrollCoordinateSpace: String {
         "chat-scroll-\(session.id)"
+    }
+
+    private var shouldMeasureMessageFrames: Bool {
+        ChatViewportPerformancePolicy.shouldMeasureVisibleFrames(
+            hasStreamingPreview: hasTransientAssistantPreview,
+            isTyping: isSessionTyping
+        )
+    }
+
+    private var themeRenderKey: String {
+        "\(currentTheme.id.rawValue)-\(appState.colorScheme == .dark ? "dark" : "light")"
     }
 
     var body: some View {
@@ -301,28 +384,17 @@ struct ChatView: View {
             GeometryReader { scrollGeometry in
                 ScrollView {
                     let msgs = renderedMessages
-                    let hasContent = !msgs.isEmpty || chatManager.isTyping
+                    let hasContent = !msgs.isEmpty || isSessionTyping
                     if hasContent {
-                        VStack(spacing: 0) {
-                            ForEach(msgs) { message in
-                                MessageBubbleView(
-                                    item: message,
-                                    theme: currentTheme
-                                )
-                                .id(message.id)
-                                .background(messageFrameReporter(for: message.id))
-                            }
-
-                            if chatManager.isTyping {
-                                typingIndicator
-                            }
-
-                            Color.clear
-                                .frame(height: 1)
-                                .id("bottom")
-                        }
-                        .padding(.top, 12)
-                        .padding(.bottom, 16)
+                        ChatMessageListContent(
+                            messages: msgs,
+                            isTyping: isSessionTyping,
+                            theme: currentTheme,
+                            themeKey: themeRenderKey,
+                            shouldMeasure: shouldMeasureMessageFrames,
+                            coordinateSpaceName: messageScrollCoordinateSpace
+                        )
+                        .equatable()
                     }
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -334,6 +406,7 @@ struct ChatView: View {
                     restoreSavedScrollAnchorIfNeeded(proxy: proxy)
                 }
                 .onPreferenceChange(ChatMessageFramePreferenceKey.self) { frames in
+                    guard shouldMeasureMessageFrames else { return }
                     updateStoredScrollAnchor(
                         with: frames,
                         viewportHeight: scrollGeometry.size.height
@@ -357,7 +430,7 @@ struct ChatView: View {
                     scheduleStreamingScrollToBottom(proxy: proxy)
                 }
             }
-            .onChange(of: chatManager.isTyping) { _, _ in
+            .onChange(of: isSessionTyping) { _, _ in
                 if ChatAutoScrollPolicy.shouldScrollToBottom(for: .typingStateChanged) {
                     debouncedScrollToBottom(proxy: proxy)
                 }
@@ -387,10 +460,10 @@ struct ChatView: View {
                 isInputFocused = false
             }
         }
-        .onChange(of: chatManager.liveMessages.count) { _, _ in
+        .onChange(of: sessionLiveMessages.count) { _, _ in
             syncLiveMessages()
         }
-        .onChange(of: chatManager.liveMessages.last?.isStreaming) { _, isStreaming in
+        .onChange(of: sessionLiveMessages.last?.isStreaming) { _, isStreaming in
             if isStreaming == false {
                 syncLiveMessages()
             }
@@ -433,17 +506,6 @@ struct ChatView: View {
         }
     }
 
-    @ViewBuilder
-    private func messageFrameReporter(for messageId: String) -> some View {
-        GeometryReader { geometry in
-            Color.clear
-                .preference(
-                    key: ChatMessageFramePreferenceKey.self,
-                    value: [messageId: geometry.frame(in: .named(messageScrollCoordinateSpace))]
-                )
-        }
-    }
-
     private func restoreSavedScrollAnchorIfNeeded(proxy: ScrollViewProxy) {
         guard !isTrackingScrollAnchor else { return }
         guard scrollRestoreTask == nil else { return }
@@ -483,6 +545,7 @@ struct ChatView: View {
             from: visibleFrames,
             viewportHeight: viewportHeight
         )
+        guard appState.chatScrollAnchor(for: session.id) != anchorId else { return }
         appState.setChatScrollAnchor(anchorId, for: session.id)
     }
 
@@ -517,7 +580,8 @@ struct ChatView: View {
             attachments: item.attachments,
             toolEvents: item.toolEvents,
             isStreaming: item.isStreaming || shouldKeepTyping,
-            isError: item.isError
+            isError: item.isError,
+            timestamp: item.timestamp
         )
     }
 
@@ -534,7 +598,7 @@ struct ChatView: View {
 
         if let persistedMessage = storedMessages.last(where: { $0.id == currentMessageId }) {
             bindStreamingDisplay(to: currentMessageId, targetText: persistedMessage.text)
-        } else if let liveMessage = chatManager.liveMessages.last(where: { $0.id == currentMessageId }) {
+        } else if let liveMessage = sessionLiveMessages.last(where: { $0.id == currentMessageId }) {
             bindStreamingDisplay(to: currentMessageId, targetText: liveMessage.text)
         } else if streamingDisplayText == streamingTargetText {
             clearStreamingDisplayState()
@@ -599,10 +663,7 @@ struct ChatView: View {
     }
 
     private func syncLiveMessages() {
-        let agentId = session.agentId
-        let live = chatManager.liveMessages.filter {
-            $0.agentId == nil || $0.agentId == agentId
-        }
+        let live = sessionLiveMessages
         let stored = appState.messages(for: session.id)
         let storedIds = Set(stored.map(\.id))
         var newlyPersistedIds = Set<String>()
@@ -633,22 +694,6 @@ struct ChatView: View {
         }
 
         syncStreamingDisplayState()
-    }
-
-    private var typingIndicator: some View {
-        HStack(alignment: .bottom) {
-            TypingBreathingDotsView()
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(Color(.systemGray5))
-                )
-
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
     }
 
     private var emptyStateOverlay: some View {
@@ -1160,6 +1205,7 @@ struct ChatView: View {
         chatManager.sendMessage(
             text: text,
             agentId: session.agentId,
+            sessionKey: session.sessionKey,
             attachments: attachments.map(\.protocolAttachment)
         )
         inputText = ""

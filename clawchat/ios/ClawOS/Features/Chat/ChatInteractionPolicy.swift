@@ -25,6 +25,15 @@ enum ChatAutoScrollPolicy {
     }
 }
 
+enum ChatViewportPerformancePolicy {
+    static func shouldMeasureVisibleFrames(
+        hasStreamingPreview: Bool,
+        isTyping: Bool
+    ) -> Bool {
+        !hasStreamingPreview && !isTyping
+    }
+}
+
 enum ChatVoiceOverlayPolicy {
     static func isWalkieTalkieOverlayEnabled(
         isInputFocused: Bool,

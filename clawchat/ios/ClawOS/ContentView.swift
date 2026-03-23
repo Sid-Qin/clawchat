@@ -28,7 +28,7 @@ struct ContentView: View {
 
                 Tab("Agents", systemImage: "person.2.fill", value: 2) {
                     NavigationStack {
-                        AgentProfileView()
+                        AgentHubView()
                     }
                 }
             }

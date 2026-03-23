@@ -80,6 +80,7 @@ public struct MessageStream: BaseMessage, Sendable {
     public let id: String
     public let ts: Int64
     public let agentId: String?
+    public let sessionKey: String?
     public let delta: String
     public let phase: StreamPhase
     public let finalText: String?
@@ -99,6 +100,7 @@ public struct MessageReasoning: BaseMessage, Sendable {
     public let id: String
     public let ts: Int64
     public let agentId: String?
+    public let sessionKey: String?
     public let text: String
     public let phase: ReasoningPhase?
 }
@@ -119,6 +121,7 @@ public struct ToolEvent: BaseMessage, Sendable {
     public let id: String
     public let ts: Int64
     public let agentId: String?
+    public let sessionKey: String?
     public let tool: String
     public let phase: ToolPhase
     public let label: String?
@@ -133,6 +136,7 @@ public struct MessageOutbound: BaseMessage, Sendable {
     public let id: String
     public let ts: Int64
     public let agentId: String?
+    public let sessionKey: String?
     public let text: String?
     public let media: [MediaItem]?
 }

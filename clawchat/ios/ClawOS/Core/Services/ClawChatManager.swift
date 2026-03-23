@@ -36,6 +36,14 @@ final class ClawChatManager: @unchecked Sendable {
         chatState?.isTyping ?? false
     }
 
+    func liveMessages(for agentId: String, sessionKey: String?) -> [ChatMessage] {
+        chatState?.liveMessages(for: agentId, sessionKey: sessionKey) ?? []
+    }
+
+    func isTyping(for agentId: String, sessionKey: String?) -> Bool {
+        chatState?.isTyping(for: agentId, sessionKey: sessionKey) ?? false
+    }
+
     var gatewayOnline: Bool {
         chatState?.gatewayOnline ?? false
     }
@@ -168,6 +176,7 @@ final class ClawChatManager: @unchecked Sendable {
     func sendMessage(
         text: String,
         agentId: String = "default",
+        sessionKey: String? = nil,
         attachments: [MessageAttachment] = []
     ) {
         // If disconnected, try to recover before sending
@@ -180,7 +189,7 @@ final class ClawChatManager: @unchecked Sendable {
                 await webSocketClient?.reconnectIfNeeded()
             }
         }
-        chatState?.sendMessage(text: text, agentId: agentId, attachments: attachments)
+        chatState?.sendMessage(text: text, agentId: agentId, sessionKey: sessionKey, attachments: attachments)
     }
 
     @MainActor
