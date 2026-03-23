@@ -93,7 +93,12 @@ struct ChatView: View {
 
     private var previewAssistantMessage: ChatMessage? {
         let storedIds = Set(storedMessages.map(\.id))
-        return chatManager.liveMessages.last(where: { $0.role == .assistant && !storedIds.contains($0.id) })
+        let agentId = session.agentId
+        return chatManager.liveMessages.last(where: {
+            $0.role == .assistant
+            && !storedIds.contains($0.id)
+            && ($0.agentId == nil || $0.agentId == agentId)
+        })
     }
 
     private var renderedMessages: [MessageBubbleItem] {
@@ -594,9 +599,13 @@ struct ChatView: View {
     }
 
     private func syncLiveMessages() {
-        let live = chatManager.liveMessages
+        let agentId = session.agentId
+        let live = chatManager.liveMessages.filter {
+            $0.agentId == nil || $0.agentId == agentId
+        }
         let stored = appState.messages(for: session.id)
         let storedIds = Set(stored.map(\.id))
+        var newlyPersistedIds = Set<String>()
 
         for msg in live {
             if msg.isStreaming { continue }
@@ -604,6 +613,7 @@ struct ChatView: View {
 
             if storedIds.contains(msg.id) {
                 appState.updateMessage(in: session.id, messageId: msg.id, text: msg.text)
+                newlyPersistedIds.insert(msg.id)
             } else {
                 let stored = StoredMessage(
                     id: msg.id,
@@ -613,7 +623,13 @@ struct ChatView: View {
                     timestamp: msg.timestamp
                 )
                 appState.appendMessage(to: session.id, message: stored)
+                newlyPersistedIds.insert(msg.id)
             }
+        }
+
+        // Clean up persisted messages from live state to prevent replay
+        if !newlyPersistedIds.isEmpty {
+            chatManager.chatState?.clearCompletedMessages(persistedIds: newlyPersistedIds)
         }
 
         syncStreamingDisplayState()
