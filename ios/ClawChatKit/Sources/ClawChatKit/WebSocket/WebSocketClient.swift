@@ -88,19 +88,23 @@ public actor WebSocketClient {
     }
 
     /// Send a Codable message as JSON text frame.
+    /// If the WebSocket is disconnected (e.g. after max retries exhausted),
+    /// this will trigger a reconnect attempt automatically.
     public func send<T: Encodable>(_ message: T) {
-        guard let task = webSocketTask else {
-            print("[ClawChatKit] send() dropped: no webSocketTask")
-            return
-        }
-        guard task.state == .running else {
-            print("[ClawChatKit] send() dropped: task.state=\(task.state.rawValue) (not running)")
+        if webSocketTask == nil || webSocketTask?.state != .running {
+            if !closed && _connectionState == .disconnected {
+                print("[ClawChatKit] send() triggered reconnect (was idle-disconnected)")
+                attempt = 0
+                connect()
+            } else {
+                print("[ClawChatKit] send() dropped: no active connection")
+            }
             return
         }
         do {
             let data = try JSONEncoder().encode(message)
             let string = String(data: data, encoding: .utf8) ?? ""
-            task.send(.string(string)) { error in
+            webSocketTask?.send(.string(string)) { error in
                 if let error {
                     print("[ClawChatKit] send() error: \(error.localizedDescription)")
                 }
@@ -108,6 +112,14 @@ public actor WebSocketClient {
         } catch {
             print("[ClawChatKit] send() encode error: \(error)")
         }
+    }
+
+    /// Manually trigger a reconnect (e.g. when app comes to foreground).
+    /// Resets attempt counter so the full backoff sequence starts fresh.
+    public func reconnectIfNeeded() {
+        guard !closed, _connectionState == .disconnected else { return }
+        attempt = 0
+        connect()
     }
 
     // MARK: - Internals
@@ -185,9 +197,9 @@ public actor WebSocketClient {
 
         guard !closed else { return }
 
-        // Give up after max attempts — avoid zombie reconnect loops
+        // Pause after max attempts — can be resumed by send() or reconnectIfNeeded()
         guard attempt < maxReconnectAttempts else {
-            print("[ClawChatKit] max reconnect attempts (\(maxReconnectAttempts)) reached, giving up")
+            print("[ClawChatKit] max reconnect attempts (\(maxReconnectAttempts)) reached, pausing (send or reconnectIfNeeded will resume)")
             return
         }
 

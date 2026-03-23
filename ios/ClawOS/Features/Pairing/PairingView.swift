@@ -1,5 +1,17 @@
 import SwiftUI
 
+// MARK: - Deep Link Parser
+
+enum PairingDeepLink {
+    static func parse(_ url: URL) -> (relay: String, code: String)? {
+        guard url.scheme == "clawchat", url.host == "pair" else { return nil }
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        guard let relay = components?.queryItems?.first(where: { $0.name == "relay" })?.value,
+              let code = components?.queryItems?.first(where: { $0.name == "code" })?.value else { return nil }
+        return (relay: relay, code: code)
+    }
+}
+
 // MARK: - Floating Card Overlay (used at app root)
 
 struct PairingOverlay: View {
@@ -38,6 +50,7 @@ struct PairingCardView: View {
     @State private var pairingCode = ""
     @State private var isPairing = false
     @State private var errorMessage: String?
+    @State private var showScanner = false
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable { case relay, code }
@@ -70,7 +83,7 @@ struct PairingCardView: View {
                     .padding(.top, 16)
             }
 
-            pairButton
+            buttonArea
                 .padding(.horizontal, 24)
                 .padding(.top, 32)
                 .padding(.bottom, 12)
@@ -96,6 +109,15 @@ struct PairingCardView: View {
         .onTapGesture {
             hideKeyboard()
         }
+        .sheet(isPresented: $showScanner) {
+            QRScannerSheet(onParsed: handleDeepLink)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .clawChatDeepLink)) { notification in
+            if let relay = notification.userInfo?["relay"] as? String,
+               let code = notification.userInfo?["code"] as? String {
+                handleDeepLink(relay, code)
+            }
+        }
     }
 
     // MARK: - Header
@@ -113,7 +135,7 @@ struct PairingCardView: View {
                 Text("配对 Gateway")
                     .font(.title3.weight(.bold))
 
-                Text("输入 Relay 地址与配对码")
+                Text("扫描二维码或手动输入配对信息")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -196,35 +218,59 @@ struct PairingCardView: View {
 
     // MARK: - Actions
 
-    private var pairButton: some View {
-        Button {
-            hideKeyboard()
-            Task { await startPairing() }
-        } label: {
-            Group {
-                if isPairing {
-                    ProgressView()
-                        .tint(.white)
-                } else {
-                    Label("开始配对", systemImage: "link")
-                        .font(.headline.weight(.semibold))
-                }
+    private var buttonArea: some View {
+        HStack(spacing: 12) {
+            // Scan QR button
+            Button {
+                hideKeyboard()
+                showScanner = true
+            } label: {
+                Image(systemName: "qrcode.viewfinder")
+                    .font(.title2.weight(.semibold))
+                    .frame(width: 52, height: 52)
+                    .foregroundStyle(.white)
+                    .background(
+                        accent.opacity(0.8),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            .blendMode(.overlay)
+                    )
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 52)
-            .foregroundStyle(.white)
-            .background(
-                isFormValid ? accent : Color.gray.opacity(0.4),
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    .blendMode(.overlay)
-            )
+            .disabled(isPairing)
+
+            // Pair button
+            Button {
+                hideKeyboard()
+                Task { await startPairing() }
+            } label: {
+                Group {
+                    if isPairing {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Label("开始配对", systemImage: "link")
+                            .font(.headline.weight(.semibold))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .foregroundStyle(.white)
+                .background(
+                    isFormValid ? accent : Color.gray.opacity(0.4),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        .blendMode(.overlay)
+                )
+            }
+            .disabled(!isFormValid || isPairing)
+            .shadow(color: isFormValid ? accent.opacity(0.3) : .clear, radius: 10, y: 4)
         }
-        .disabled(!isFormValid || isPairing)
-        .shadow(color: isFormValid ? accent.opacity(0.3) : .clear, radius: 10, y: 4)
     }
 
     private var cancelButton: some View {
@@ -281,6 +327,75 @@ struct PairingCardView: View {
         }
 
         isPairing = false
+    }
+
+    func handleDeepLink(_ relay: String, _ code: String) {
+        relayUrl = relay
+        // Format code as XXX-XXX
+        let cleaned = code.replacingOccurrences(of: "-", with: "").prefix(6).uppercased()
+        if cleaned.count > 3 {
+            pairingCode = String(cleaned.prefix(3)) + "-" + String(cleaned.dropFirst(3))
+        } else {
+            pairingCode = String(cleaned)
+        }
+        // Auto-pair
+        Task { await startPairing() }
+    }
+}
+
+// MARK: - QR Scanner Sheet
+
+private struct QRScannerSheet: View {
+    let onParsed: (String, String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                QRScannerView { scannedValue in
+                    handleScanned(scannedValue)
+                }
+                .ignoresSafeArea()
+
+                VStack {
+                    Spacer()
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(.red.opacity(0.8), in: Capsule())
+                            .padding(.bottom, 40)
+                    }
+                }
+            }
+            .navigationTitle("扫描配对码")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func handleScanned(_ value: String) {
+        guard let url = URL(string: value),
+              let parsed = PairingDeepLink.parse(url) else {
+            errorMessage = "无效的二维码"
+            // Re-enable scanning after a moment
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                errorMessage = nil
+            }
+            return
+        }
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            onParsed(parsed.relay, parsed.code)
+        }
     }
 }
 

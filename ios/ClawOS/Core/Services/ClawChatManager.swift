@@ -131,7 +131,10 @@ final class ClawChatManager: @unchecked Sendable {
             // Request latest agents from gateway (relay may return stale/empty list)
             await client.send(StatusRequest())
         } catch {
-            linkState = .error(error.localizedDescription)
+            // Don't set .error for transient failures — stay .disconnected
+            // so reconnect can be triggered later (e.g. on send or app foreground)
+            linkState = .disconnected
+            print("[ClawChatManager] connect failed: \(error.localizedDescription)")
         }
     }
 
@@ -167,6 +170,16 @@ final class ClawChatManager: @unchecked Sendable {
         agentId: String = "default",
         attachments: [MessageAttachment] = []
     ) {
+        // If disconnected, try to recover before sending
+        if case .disconnected = linkState {
+            Task {
+                await webSocketClient?.reconnectIfNeeded()
+            }
+        } else if case .error = linkState {
+            Task {
+                await webSocketClient?.reconnectIfNeeded()
+            }
+        }
         chatState?.sendMessage(text: text, agentId: agentId, attachments: attachments)
     }
 

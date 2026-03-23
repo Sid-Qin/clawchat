@@ -8,6 +8,7 @@
 
 import crypto from "node:crypto";
 import { getClawChatRuntime } from "./runtime.js";
+import { buildDeepLink, renderQrAscii } from "./qr.js";
 import type { ClawChatAccount } from "./types.js";
 
 const CHANNEL_ID = "clawchat";

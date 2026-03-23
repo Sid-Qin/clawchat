@@ -8,10 +8,10 @@ First-party messaging service for the OpenClaw ecosystem.
 clawchat/
 ├── openspec/specs/architecture/   # Architecture specs & wire protocol
 ├── service/                       # ClawChat relay service (Node.js/Bun)
+├── plugin/                        # OpenClaw plugin (@claw-os/clawchat on npm)
 ├── ios/                           # iOS app (SwiftUI)
 ├── android/                       # Android app (Jetpack Compose)
-├── cli/                           # CLI reference client (for testing)
-└── protocol/                      # Shared protocol types (TypeScript)
+└── packages/protocol/             # Shared protocol types (TypeScript)
 ```
 
 ## Architecture
@@ -23,7 +23,7 @@ Client App ──> ClawChat Service (relay) <── OpenClaw Gateway
 ```
 
 - **ClawChat Service**: Lightweight WebSocket relay. Routes messages between paired gateways and apps.
-- **Channel Plugin**: [`clawchat-plugin`](https://www.npmjs.com/package/clawchat-plugin) on npm. Standard channel plugin.
+- **Channel Plugin**: [`@claw-os/clawchat`](https://www.npmjs.com/package/@claw-os/clawchat) on npm. Standard channel plugin.
 - **Client Apps**: iOS, Android, CLI. Any app implementing the wire protocol can connect.
 
 ## Plugin Usage
@@ -31,27 +31,29 @@ Client App ──> ClawChat Service (relay) <── OpenClaw Gateway
 ### Install
 
 ```bash
-openclaw plugins install clawchat-plugin
+npx @claw-os/clawchat install
 ```
 
-### Configure
+Or manually:
 
-In `~/.openclaw/openclaw.json` (or yaml):
-
-```yaml
-plugins:
-  entries:
-    clawchat:
-      enabled: true
-      config:
-        token: <your-relay-gateway-token>
-        relay: wss://clawchat-production-db31.up.railway.app   # optional
-        session: clawchat                                        # optional
+```bash
+openclaw plugins install @claw-os/clawchat
 ```
 
-### Pair
+This single command will:
+1. Generate a gateway token
+2. Configure `~/.openclaw/openclaw.json`
+3. Install the plugin
+4. Restart the gateway
+5. Display a **QR code** for pairing with the ClawOS app
 
-Run `/clawchat pair` in OpenClaw to generate a 6-character pairing code, then enter it in the mobile app.
+### Pair a New Device
+
+```bash
+npx @claw-os/clawchat pair
+```
+
+Or use the chat command after gateway is running: `/clawchat pair`
 
 ## Specs
 
@@ -83,5 +85,5 @@ Run `/clawchat pair` in OpenClaw to generate a 6-character pairing code, then en
 - Bun / Node.js
 - `cd service && bun install && bun dev`
 
-### CLI Client
-- `cd cli && bun install && bun run connect`
+### Plugin
+- `cd plugin && npm publish --access public`
