@@ -35,12 +35,14 @@ public final class ChatState: @unchecked Sendable {
     // MARK: - Lifecycle
 
     /// Start listening to the WebSocket message stream and connection state.
+    @MainActor
     public func start() {
         startMessageLoop()
         startStateObserver()
     }
 
     /// Stop listening and clean up.
+    @MainActor
     public func stop() {
         messageLoopTask?.cancel()
         messageLoopTask = nil
@@ -48,22 +50,26 @@ public final class ChatState: @unchecked Sendable {
         stateObserverTask = nil
     }
 
+    @MainActor
     public func setGatewayOnline(_ isOnline: Bool) {
         gatewayOnline = isOnline
     }
 
     /// Remove completed (non-streaming) messages that have been persisted.
     /// Call this after syncing live messages to storage to prevent replay on re-enter.
+    @MainActor
     public func clearCompletedMessages(persistedIds: Set<String>) {
         messages.removeAll { msg in
             !msg.isStreaming && persistedIds.contains(msg.id)
         }
     }
 
+    @MainActor
     public func liveMessages(for agentId: String, sessionKey: String?) -> [ChatMessage] {
         messages.filter { $0.route.matches(targetAgentId: agentId, targetSessionKey: sessionKey) }
     }
 
+    @MainActor
     public func isTyping(for agentId: String, sessionKey: String?) -> Bool {
         activeTypingRoutes.contains { $0.matches(targetAgentId: agentId, targetSessionKey: sessionKey) }
     }
@@ -92,6 +98,7 @@ public final class ChatState: @unchecked Sendable {
     // MARK: - Send
 
     /// Send a user message. Appends to messages and sends to relay.
+    @MainActor
     public func sendMessage(
         text: String,
         agentId: String = "default",
@@ -135,10 +142,26 @@ public final class ChatState: @unchecked Sendable {
             guard let self else { return }
             await self.client.onStateChange { [weak self] state in
                 Task { @MainActor in
-                    self?.connectionState = state
+                    guard let self else { return }
+                    self.connectionState = state
+                    if state == .disconnected {
+                        self.cleanUpStaleStreamingState()
+                    }
                 }
             }
         }
+    }
+
+    @MainActor
+    private func cleanUpStaleStreamingState() {
+        for (_, messageId) in streamingMessageIdByRoute {
+            if let idx = messages.firstIndex(where: { $0.id == messageId }) {
+                messages[idx].isStreaming = false
+            }
+        }
+        streamingMessageIdByRoute.removeAll()
+        activeTypingRoutes.removeAll()
+        refreshTypingState()
     }
 
     @MainActor
