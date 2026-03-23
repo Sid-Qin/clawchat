@@ -8,10 +8,15 @@ struct AgentProfileView: View {
     @State private var showAgentSwitcher = false
     @State private var agentNameButtonHeight: CGFloat = 0
 
+    var agentId: String?
+
     private let maxVisibleAgentSwitcherRows = 5
 
     private var currentAgent: Agent? {
-        appState.selectedAgent
+        if let agentId {
+            return appState.agents.first { $0.id == agentId }
+        }
+        return appState.selectedAgent
     }
 
     private var currentTheme: AppVisualTheme {
@@ -49,15 +54,9 @@ struct AgentProfileView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .scrollIndicators(.hidden)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    SettingsView()
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(.secondary)
-                }
+        .onAppear {
+            if let agentId, appState.selectedAgentId != agentId {
+                appState.selectedAgentId = agentId
             }
         }
     }
@@ -292,42 +291,34 @@ struct AgentProfileView: View {
                     .foregroundStyle(.secondary)
             }
 
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "quote.opening")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(currentTheme.accent.opacity(0.8))
-                    .offset(y: -2)
-                
-                Text(currentAgent?.theme ?? "你好！我是你的专属 AI 助手，随时准备为你提供帮助。")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(nil)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(
-                .rect(
-                    topLeadingRadius: 4,
-                    bottomLeadingRadius: 16,
-                    bottomTrailingRadius: 16,
-                    topTrailingRadius: 16
-                )
-            )
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("核心功能")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                
-                HStack(spacing: 8) {
-                    featureTag("智能对话")
-                    featureTag("知识问答")
-                    featureTag("任务执行")
+            if let theme = currentAgent?.theme, !theme.isEmpty {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "quote.opening")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(currentTheme.accent.opacity(0.8))
+                        .offset(y: -2)
+                    
+                    Text(theme)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(nil)
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(
+                    .rect(
+                        topLeadingRadius: 4,
+                        bottomLeadingRadius: 16,
+                        bottomTrailingRadius: 16,
+                        topTrailingRadius: 16
+                    )
+                )
             }
-            .padding(.top, 4)
+
+            // You can add logic here to display actual features if they become available in the Agent model
+            // Currently leaving this out if there's no real data
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
@@ -417,30 +408,36 @@ struct AgentProfileView: View {
 
             if isAdvancedExpanded {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                    statCard(
-                        icon: "cpu",
-                        title: "模型",
-                        value: currentAgent?.model ?? "未设定"
-                    )
-                    statCard(
-                        icon: "point.3.connected.trianglepath.dotted",
-                        title: "网关",
-                        value: appState.gateways.first(where: { $0.id == currentAgent?.gatewayId })?.name ?? "未连接"
-                    )
-                    statCard(
-                        icon: "puzzlepiece.extension",
-                        title: "Skills",
-                        value: {
-                            let enabled = appState.skills.filter(\.isEnabled).count
-                            let total = appState.skills.count
-                            return total > 0 ? "\(enabled)/\(total) 已启用" : "暂无"
-                        }()
-                    )
-                    statCard(
-                        icon: "flame",
-                        title: "Token 消耗",
-                        value: formatTokenCount(currentAgent?.totalTokens ?? 0)
-                    )
+                    if let model = currentAgent?.model, !model.isEmpty {
+                        statCard(
+                            icon: "cpu",
+                            title: "模型",
+                            value: model
+                        )
+                    }
+                    if let gwId = currentAgent?.gatewayId, let gwName = appState.gateways.first(where: { $0.id == gwId })?.name {
+                        statCard(
+                            icon: "point.3.connected.trianglepath.dotted",
+                            title: "网关",
+                            value: gwName
+                        )
+                    }
+                    let enabled = appState.skills.filter(\.isEnabled).count
+                    let total = appState.skills.count
+                    if total > 0 {
+                        statCard(
+                            icon: "puzzlepiece.extension",
+                            title: "Skills",
+                            value: "\(enabled)/\(total) 已启用"
+                        )
+                    }
+                    if let tokens = currentAgent?.totalTokens, tokens > 0 {
+                        statCard(
+                            icon: "flame",
+                            title: "Token 消耗",
+                            value: formatTokenCount(tokens)
+                        )
+                    }
                 }
                 .padding(.top, 4)
             }
@@ -461,11 +458,19 @@ struct AgentProfileView: View {
                     .foregroundStyle(.secondary)
             }
 
-            VStack(spacing: 14) {
-                cronJobRow(time: "每天 08:00", description: "获取并总结今日 AI 行业新闻", isActive: true)
-                cronJobRow(time: "每小时", description: "检查 GitHub 仓库的新 Issue", isActive: true)
-                cronJobRow(time: "每周五 18:00", description: "生成本周工作周报并发送邮件", isActive: false)
+            // Placeholder for when there are no cron jobs
+            VStack(spacing: 8) {
+                Image(systemName: "calendar.badge.plus")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.tertiary)
+                Text("暂无定时任务")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+            .background(Color(.secondarySystemBackground).opacity(0.5))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -36,6 +36,21 @@ struct ProtocolTests {
         #expect(stream.finalText == "full response")
     }
 
+    @Test("Decode message.stream preserves sessionKey")
+    func decodeStreamSessionKey() throws {
+        let json = """
+        {"type":"message.stream","id":"abc","ts":1234,"agentId":"default","sessionKey":"session-a","delta":"hello","phase":"streaming"}
+        """.data(using: .utf8)!
+
+        let msg = try ClawChatMessage.decode(from: json)
+        guard case .messageStream(let stream) = msg else {
+            Issue.record("Expected messageStream")
+            return
+        }
+
+        #expect(reflectedOptionalString(named: "sessionKey", from: stream) == "session-a")
+    }
+
     @Test("Decode app.paired")
     func decodeAppPaired() throws {
         let json = """
@@ -82,6 +97,21 @@ struct ProtocolTests {
         #expect(tool.label == "Searching...")
     }
 
+    @Test("Decode tool.event preserves sessionKey")
+    func decodeToolEventSessionKey() throws {
+        let json = """
+        {"type":"tool.event","id":"t1","ts":1000,"agentId":"default","sessionKey":"session-a","tool":"web_search","phase":"result","label":"Searching..."}
+        """.data(using: .utf8)!
+
+        let msg = try ClawChatMessage.decode(from: json)
+        guard case .toolEvent(let tool) = msg else {
+            Issue.record("Expected toolEvent")
+            return
+        }
+
+        #expect(reflectedOptionalString(named: "sessionKey", from: tool) == "session-a")
+    }
+
     @Test("Decode error message")
     func decodeError() throws {
         let json = """
@@ -109,6 +139,21 @@ struct ProtocolTests {
             return
         }
         #expect(t.active == true)
+    }
+
+    @Test("Decode typing preserves sessionKey")
+    func decodeTypingSessionKey() throws {
+        let json = """
+        {"type":"typing","id":"ty1","ts":1000,"agentId":"default","sessionKey":"session-a","active":true}
+        """.data(using: .utf8)!
+
+        let msg = try ClawChatMessage.decode(from: json)
+        guard case .typing(let typing) = msg else {
+            Issue.record("Expected typing")
+            return
+        }
+
+        #expect(reflectedOptionalString(named: "sessionKey", from: typing) == "session-a")
     }
 
     @Test("Decode presence")
@@ -214,5 +259,17 @@ struct ProtocolTests {
             Issue.record("Expected pong")
             return
         }
+    }
+
+    private func reflectedOptionalString(named label: String, from value: Any) -> String? {
+        let mirror = Mirror(reflecting: value)
+        guard let child = mirror.children.first(where: { $0.label == label }) else { return nil }
+        if let string = child.value as? String {
+            return string
+        }
+
+        let optionalMirror = Mirror(reflecting: child.value)
+        guard optionalMirror.displayStyle == .optional else { return nil }
+        return optionalMirror.children.first?.value as? String
     }
 }

@@ -405,10 +405,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = LBN3W98T26;
+				DEVELOPMENT_TEAM = JB4638R6SY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "ClawOS needs access to the local network to connect to OpenClaw Gateway";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ClawOS needs access to the microphone for voice input";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "ClawOS needs speech recognition to convert voice to text";
@@ -422,7 +423,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.yueyou.clawchat;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sidqin.clawchat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -442,10 +443,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = LBN3W98T26;
+				DEVELOPMENT_TEAM = JB4638R6SY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "ClawOS needs access to the local network to connect to OpenClaw Gateway";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ClawOS needs access to the microphone for voice input";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "ClawOS needs speech recognition to convert voice to text";
@@ -459,7 +461,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.yueyou.clawchat;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sidqin.clawchat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

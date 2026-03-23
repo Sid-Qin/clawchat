@@ -152,6 +152,14 @@ struct ChatStateTests {
         #expect(user != assistant)
     }
 
+    @Test("ChatRoute 在旧插件未回传 sessionKey 时回退到 agentId 匹配")
+    func chatRouteFallsBackToAgentWhenIncomingSessionKeyMissing() {
+        let legacyRoute = ChatRoute(agentId: "default", sessionKey: nil)
+
+        #expect(legacyRoute.matches(targetAgentId: "default", targetSessionKey: "session-a"))
+        #expect(legacyRoute.matches(targetAgentId: "other", targetSessionKey: "session-a") == false)
+    }
+
     // MARK: - Helpers
 
     private func makeStream(id: String, delta: String, phase: StreamPhase, finalText: String? = nil) -> MessageStream {

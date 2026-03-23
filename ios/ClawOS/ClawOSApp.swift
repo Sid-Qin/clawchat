@@ -73,8 +73,7 @@ struct ClawOSApp: App {
     }
 
     private func handleLoginComplete() {
-        // Mock 模式：不持久化 hasLoggedIn，每次冷启动都弹登录
-        // 正式接入后取消注释: hasLoggedIn = true
+        hasLoggedIn = true
 
         showSplash = true
 
