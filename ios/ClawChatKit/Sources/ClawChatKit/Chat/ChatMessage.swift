@@ -25,6 +25,7 @@ public struct ChatMessage: Identifiable, Sendable {
     public var isStreaming: Bool
     public var isError: Bool
     public let timestamp: Date
+    public var agentId: String?
 
     public init(
         id: String = UUID().uuidString,
@@ -34,7 +35,8 @@ public struct ChatMessage: Identifiable, Sendable {
         toolEvents: [ChatToolEvent] = [],
         isStreaming: Bool = false,
         isError: Bool = false,
-        timestamp: Date = Date()
+        timestamp: Date = Date(),
+        agentId: String? = nil
     ) {
         self.id = id
         self.role = role
@@ -44,5 +46,6 @@ public struct ChatMessage: Identifiable, Sendable {
         self.isStreaming = isStreaming
         self.isError = isError
         self.timestamp = timestamp
+        self.agentId = agentId
     }
 }

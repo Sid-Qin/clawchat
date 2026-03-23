@@ -51,6 +51,14 @@ public final class ChatState: @unchecked Sendable {
         gatewayOnline = isOnline
     }
 
+    /// Remove completed (non-streaming) messages that have been persisted.
+    /// Call this after syncing live messages to storage to prevent replay on re-enter.
+    public func clearCompletedMessages(persistedIds: Set<String>) {
+        messages.removeAll { msg in
+            !msg.isStreaming && persistedIds.contains(msg.id)
+        }
+    }
+
     static func mergeStreamingText(current: String, incoming: String) -> String {
         guard !incoming.isEmpty else { return current }
         guard !current.isEmpty else { return incoming }
@@ -80,7 +88,7 @@ public final class ChatState: @unchecked Sendable {
         agentId: String = "default",
         attachments: [MessageAttachment] = []
     ) {
-        let userMessage = ChatMessage(role: .user, text: text)
+        let userMessage = ChatMessage(role: .user, text: text, agentId: agentId)
         messages.append(userMessage)
 
         let inbound = MessageInbound(
@@ -166,7 +174,8 @@ public final class ChatState: @unchecked Sendable {
                     id: stream.id,
                     role: .assistant,
                     text: stream.delta,
-                    isStreaming: true
+                    isStreaming: true,
+                    agentId: stream.agentId
                 )
                 messages.append(msg)
                 streamingMessageId = stream.id
