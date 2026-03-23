@@ -15,6 +15,31 @@ public struct ChatToolEvent: Identifiable, Sendable {
     public var result: AnyCodable?
 }
 
+/// Route identity for a chat stream.
+public struct ChatRoute: Hashable, Sendable {
+    public let agentId: String?
+    public let sessionKey: String?
+
+    public init(agentId: String?, sessionKey: String? = nil) {
+        self.agentId = agentId
+        self.sessionKey = sessionKey
+    }
+
+    public func matches(targetAgentId: String, targetSessionKey: String?) -> Bool {
+        if let targetSessionKey {
+            if sessionKey == targetSessionKey {
+                return true
+            }
+
+            // Backward compatibility: older gateways/plugins may not echo sessionKey yet.
+            return sessionKey == nil && agentId == targetAgentId
+        }
+
+        guard sessionKey == nil else { return false }
+        return agentId == targetAgentId
+    }
+}
+
 /// A single chat message for display.
 public struct ChatMessage: Identifiable, Sendable {
     public let id: String
@@ -26,6 +51,11 @@ public struct ChatMessage: Identifiable, Sendable {
     public var isError: Bool
     public let timestamp: Date
     public var agentId: String?
+    public var sessionKey: String?
+
+    public var route: ChatRoute {
+        ChatRoute(agentId: agentId, sessionKey: sessionKey)
+    }
 
     public init(
         id: String = UUID().uuidString,
@@ -36,7 +66,8 @@ public struct ChatMessage: Identifiable, Sendable {
         isStreaming: Bool = false,
         isError: Bool = false,
         timestamp: Date = Date(),
-        agentId: String? = nil
+        agentId: String? = nil,
+        sessionKey: String? = nil
     ) {
         self.id = id
         self.role = role
@@ -47,5 +78,6 @@ public struct ChatMessage: Identifiable, Sendable {
         self.isError = isError
         self.timestamp = timestamp
         self.agentId = agentId
+        self.sessionKey = sessionKey
     }
 }

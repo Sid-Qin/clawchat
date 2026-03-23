@@ -12,6 +12,20 @@ import CoreGraphics
 
 struct ClawOSTests {
 
+    @Test("folder popover 拖拽使用长按激活")
+    func folderPopoverDragUsesLongPressActivation() {
+        #expect(AgentFolderPopoverDragBehavior.longPressDuration > 0)
+        #expect(AgentFolderPopoverDragBehavior.longPressDuration <= 0.4)
+        #expect(AgentFolderPopoverDragBehavior.dragStartDistance == 0)
+    }
+
+    @Test("folder popover 只有拖出阈值后才拆分 agent")
+    func folderPopoverDragRequiresEscapeThreshold() {
+        #expect(AgentFolderPopoverDragBehavior.shouldUngroup(for: CGSize(width: 0, height: 81)))
+        #expect(AgentFolderPopoverDragBehavior.shouldUngroup(for: CGSize(width: 101, height: 0)))
+        #expect(AgentFolderPopoverDragBehavior.shouldUngroup(for: CGSize(width: 60, height: 40)) == false)
+    }
+
     @Test("startNewSession 为当前选中 agent 创建会话")
     func startNewSessionCreatesSessionForSelectedAgent() {
         let appState = AppState()
@@ -36,6 +50,29 @@ struct ClawOSTests {
         #expect(session?.title == "新对话")
         #expect(appState.sessions.count == 1)
         #expect(appState.sessions.first?.id == session?.id)
+    }
+
+    @Test("group 内切换过 agent 后重新聚焦 group 不应把新建目标重置为第一个 agent")
+    func groupSelectionKeepsChosenAgentForNewSession() {
+        let appState = AppState()
+        appState.selectedGatewayId = "gw-1"
+        appState.agents = [
+            Agent(id: "a1", name: "Ayanami", avatar: "", status: .online, unreadCount: 0, gatewayId: "gw-1"),
+            Agent(id: "a2", name: "Asuka", avatar: "", status: .online, unreadCount: 0, gatewayId: "gw-1")
+        ]
+        let group = AgentGroup(id: "g1", name: "Group", agentIds: ["a1", "a2"])
+        let groupItemId = "group_\(group.id)"
+        appState.agentStripItems = [.group(group)]
+
+        appState.selectStripItem(groupItemId)
+        appState.selectAgentInGroup("a2", groupItemId: groupItemId)
+        appState.selectStripItem(groupItemId)
+
+        let session = appState.startNewSession()
+
+        #expect(appState.selectedStripItemId == groupItemId)
+        #expect(appState.selectedAgentId == "a2")
+        #expect(session?.agentId == "a2")
     }
 
     @Test("deleteSession 删除指定会话")
@@ -94,6 +131,37 @@ struct ClawOSTests {
         appState.appendMessage(to: "s1", message: message)
 
         #expect(appState.sessions.first?.lastMessage == "附件：eva.png")
+    }
+
+    @Test("startNewSession 为同一 agent 生成独立 sessionKey")
+    func startNewSessionGeneratesDistinctSessionKeys() {
+        let appState = AppState()
+        appState.agents = [
+            Agent(
+                id: "hulu",
+                name: "呼噜",
+                avatar: "",
+                status: .online,
+                unreadCount: 0,
+                gatewayId: "gw-1",
+                model: "claude-opus-4-6",
+                availableModels: ["claude-opus-4-6"]
+            )
+        ]
+        appState.selectedAgentId = "hulu"
+
+        let first = appState.startNewSession()
+        let second = appState.startNewSession()
+        let firstKey = reflectedOptionalString(named: "sessionKey", from: first as Any)
+        let secondKey = reflectedOptionalString(named: "sessionKey", from: second as Any)
+
+        #expect(first != nil)
+        #expect(second != nil)
+        #expect(firstKey != nil)
+        #expect(secondKey != nil)
+        #expect(firstKey?.isEmpty == false)
+        #expect(secondKey?.isEmpty == false)
+        #expect(firstKey != secondKey)
     }
 
     @Test("session 左滑超过确认阈值后会进入阻尼区")
@@ -211,9 +279,25 @@ struct ClawOSTests {
         #expect(next == "hello world")
     }
 
-    @Test("打字机滚动跟随节奏比字符输出节奏更快")
-    func typewriterScrollFollowCadenceIsFasterThanTypingCadence() {
-        #expect(StreamingTypewriter.followScrollDelayMilliseconds < StreamingTypewriter.tickIntervalMilliseconds)
+    @Test("流式滚动跟随会节流避免每个字都触发滚动")
+    func typewriterScrollFollowCadenceIsThrottledForStreaming() {
+        #expect(StreamingTypewriter.followScrollDelayMilliseconds >= StreamingTypewriter.tickIntervalMilliseconds)
+    }
+
+    @Test("流式或 typing 期间暂停消息可见性测量")
+    func chatViewportTrackingSuspendsDuringLiveUpdates() {
+        #expect(ChatViewportPerformancePolicy.shouldMeasureVisibleFrames(
+            hasStreamingPreview: true,
+            isTyping: false
+        ) == false)
+        #expect(ChatViewportPerformancePolicy.shouldMeasureVisibleFrames(
+            hasStreamingPreview: false,
+            isTyping: true
+        ) == false)
+        #expect(ChatViewportPerformancePolicy.shouldMeasureVisibleFrames(
+            hasStreamingPreview: false,
+            isTyping: false
+        ))
     }
 
     @Test("聊天滚动恢复会选择最接近顶部的可见消息")
@@ -254,6 +338,27 @@ struct ClawOSTests {
         #expect(HomeSidebarMetrics.addButtonDiameter == 36)
     }
 
+    @Test("统一入口在已连接时显示在线状态点")
+    func sidebarHubShowsConnectedTone() {
+        let tone = SidebarHubBehavior.indicatorTone(for: .connected)
+
+        #expect(tone == .connected)
+    }
+
+    @Test("统一入口在连接中时显示过渡状态点")
+    func sidebarHubShowsConnectingTone() {
+        let tone = SidebarHubBehavior.indicatorTone(for: .connecting)
+
+        #expect(tone == .connecting)
+    }
+
+    @Test("统一入口在未连接或错误时显示离线状态点")
+    func sidebarHubShowsInactiveToneForOfflineStates() {
+        #expect(SidebarHubBehavior.indicatorTone(for: .unpaired) == .inactive)
+        #expect(SidebarHubBehavior.indicatorTone(for: .disconnected) == .inactive)
+        #expect(SidebarHubBehavior.indicatorTone(for: .error("timeout")) == .inactive)
+    }
+
     @Test("sidebar 单列宽度为 62pt")
     func sidebarUsesCompactWidth() {
         #expect(HomeSidebarMetrics.singleColumnWidth == 62)
@@ -263,12 +368,6 @@ struct ClawOSTests {
     func sidebarUsesFullHeightSlideOut() {
         #expect(HomeSidebarMetrics.singleColumnWidth == 62)
         #expect(HomeSidebarMetrics.sidebarLeadingPadding == 10)
-    }
-
-    @Test("sidebar 手势会扩大边缘响应区并降低起滑距离")
-    func sidebarGestureFeelsMoreResponsive() {
-        #expect(HomeSidebarGestureMetrics.edgeActivationWidth == 72)
-        #expect(HomeSidebarGestureMetrics.minimumDistance == 6)
     }
 
     @Test("sidebar 单列阶段结束后开始进入扩展进度")
@@ -356,49 +455,6 @@ struct ClawOSTests {
         )
     }
 
-    @Test("sidebar 层级高于主内容，popup 层级高于 sidebar")
-    func sidebarFloatingLayersStayAboveContent() {
-        #expect(
-            HomeSidebarLayering.zIndex(for: .sidebar)
-            > HomeSidebarLayering.zIndex(for: .sessionList)
-        )
-        #expect(
-            HomeSidebarLayering.zIndex(for: .popup)
-            > HomeSidebarLayering.zIndex(for: .sidebar)
-        )
-    }
-
-    @Test("sidebar popup 过渡会让侧边栏自然淡出并让 popup 渐显")
-    func sidebarPopupTransitionCrossfadesSidebarAndPopup() {
-        #expect(HomeSidebarPopupTransition.sidebarOpacity(for: 0) == 1)
-        #expect(HomeSidebarPopupTransition.popupOpacity(for: 0) == 0)
-
-        #expect(HomeSidebarPopupTransition.sidebarOpacity(for: 0.35) < 1)
-        #expect(HomeSidebarPopupTransition.sidebarScale(for: 0.35) < 1)
-        #expect(HomeSidebarPopupTransition.popupOpacity(for: 0.35) > 0)
-        #expect(HomeSidebarPopupTransition.popupScale(for: 0.35) < 1)
-
-        #expect(HomeSidebarPopupTransition.sidebarOpacity(for: 1) == 0)
-        #expect(HomeSidebarPopupTransition.popupOpacity(for: 1) == 1)
-        #expect(HomeSidebarPopupTransition.popupScale(for: 1) == 1)
-    }
-
-    @Test("sidebar popup 关闭时侧边栏会保持隐藏，不会再次闪现")
-    func sidebarPopupDismissKeepsSidebarHidden() {
-        #expect(
-            HomeSidebarPopupTransition.sidebarOpacity(
-                for: 0.35,
-                suppressSidebar: true
-            ) == 0
-        )
-        #expect(
-            HomeSidebarPopupTransition.sidebarOpacity(
-                for: 0,
-                suppressSidebar: true
-            ) == 0
-        )
-    }
-
     @Test("sidebar 会优先保留当前 gateway 的 agent 顺序再追加其他 agent")
     func sidebarExpansionKeepsCurrentGatewayAgentsFirst() {
         let current = [
@@ -416,6 +472,44 @@ struct ClawOSTests {
         )
 
         #expect(ordered.map(\.id) == ["a1", "a2", "b1", "b2"])
+    }
+
+    @Test("固定轨道侧边栏从展开态左滑后会收起")
+    func sidebarRailClosesAfterLeftSwipeFromOpen() {
+        let next = SidebarRailBehavior.settleOpenState(
+            isOpen: true,
+            translation: -40,
+            predictedEndTranslation: -52
+        )
+
+        #expect(next == false)
+    }
+
+    @Test("固定轨道侧边栏从收起态右滑后会展开")
+    func sidebarRailOpensAfterRightSwipeFromClosed() {
+        let next = SidebarRailBehavior.settleOpenState(
+            isOpen: false,
+            translation: 28,
+            predictedEndTranslation: 44
+        )
+
+        #expect(next == true)
+    }
+
+    @Test("固定轨道侧边栏拖拽偏移会被限制在轨道宽度内")
+    func sidebarRailOffsetClampsToTrackWidth() {
+        #expect(
+            SidebarRailBehavior.sidebarOffset(
+                isOpen: true,
+                translation: -200
+            ) == -SidebarRailBehavior.railWidth
+        )
+        #expect(
+            SidebarRailBehavior.sidebarOffset(
+                isOpen: false,
+                translation: 200
+            ) == 0
+        )
     }
 
     @Test("session 长按预览默认锚定到最后一条消息")
@@ -436,6 +530,18 @@ struct ClawOSTests {
         let anchorId = SessionPreviewScrollAnchorResolver.initialAnchorMessageID(in: [])
 
         #expect(anchorId == nil)
+    }
+
+    private func reflectedOptionalString(named label: String, from value: Any) -> String? {
+        let mirror = Mirror(reflecting: value)
+        guard let child = mirror.children.first(where: { $0.label == label }) else { return nil }
+        if let string = child.value as? String {
+            return string
+        }
+
+        let optionalMirror = Mirror(reflecting: child.value)
+        guard optionalMirror.displayStyle == .optional else { return nil }
+        return optionalMirror.children.first?.value as? String
     }
 
 }

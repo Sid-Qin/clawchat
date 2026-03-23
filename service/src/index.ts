@@ -46,6 +46,7 @@ app.route("/", httpRoutes);
 
 const server = Bun.serve<WsData>({
   port: PORT,
+  hostname: "0.0.0.0",
 
   fetch(req, server) {
     const url = new URL(req.url);
