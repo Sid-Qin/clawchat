@@ -1,48 +1,36 @@
-# clawchat-plugin
+# @claw-os/clawchat
 
 ClawChat channel plugin for [OpenClaw](https://github.com/openclaw/openclaw). Connects your OpenClaw agent to the ClawChat relay so iOS/Android apps can chat with it.
 
 ## Install
 
 ```bash
-openclaw plugins install clawchat-plugin
+npx @claw-os/clawchat install
 ```
 
-## Configure
+This single command will:
+1. Generate a gateway token
+2. Configure `~/.openclaw/openclaw.json`
+3. Install the plugin
+4. Restart the gateway
+5. Display a **QR code** for pairing with the ClawOS app
 
-In `~/.openclaw/openclaw.json` (or yaml):
+## Pair a New Device
 
-```yaml
-plugins:
-  entries:
-    clawchat:
-      enabled: true
-      config:
-        token: <your-relay-gateway-token>
-        relay: wss://clawchat-production-db31.up.railway.app   # optional
-        session: clawchat                                        # optional
+```bash
+npx @claw-os/clawchat pair
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `token` | Yes | Gateway registration token. Keep secret. |
-| `relay` | No | WebSocket URL of the ClawChat relay service. Defaults to the hosted relay. |
-| `session` | No | OpenClaw session key for incoming messages. Defaults to `clawchat`. |
-
-## Usage
-
-After the plugin is configured and OpenClaw is running:
+Or use the chat command after gateway is running:
 
 ```
 /clawchat pair
 ```
 
-This generates a 6-character pairing code. Enter the code in the ClawChat iOS/Android app to connect.
-
 ## How it works
 
 ```
-ClawChat App ──> ClawChat Relay <── OpenClaw Gateway (this plugin)
+ClawOS App ──> ClawChat Relay <── OpenClaw Gateway (this plugin)
 ```
 
 Both the app and the gateway connect **outbound** to the relay — no public IP or port forwarding needed.
