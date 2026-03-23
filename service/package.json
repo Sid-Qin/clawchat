@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clawchat/protocol": "workspace:*",
+    "@clawchat/protocol": "*",
     "hono": "^4"
   }
 }

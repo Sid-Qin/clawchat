@@ -40,15 +40,19 @@ The cloud relay service. Analogous to Telegram Bot API or Discord Gateway -- it'
 
 ### Auth Model
 
-- **Gateway registration**: Gateway generates a token during `openclaw config set channels.clawchat.token`, connects to service with this token
-- **App pairing**: Gateway displays a pairing code / QR in its UI. User enters code in app. Service verifies the code matches a registered gateway, establishes the pair.
+- **Gateway registration**: Token is auto-generated (UUID) during `npx @claw-os/clawchat install` and saved to config. Gateway connects to relay with this token.
+- **App pairing**: Pairing code is generated on-demand (not in background) via two methods:
+  - `npx @claw-os/clawchat install` — automatically after installation
+  - `npx @claw-os/clawchat pair` or `/clawchat pair` — manual trigger
+  - Code is a 6-character alphanumeric string, expires after 5 minutes
+  - QR code encodes a deep link: `clawchat://pair?relay={url}&code={code}`
 - **Session persistence**: Once paired, app reconnects automatically using a device token (long-lived, revocable)
 
 ### Deployment Options
 
 - **Hosted**: ClawChat team runs the default service (e.g. `relay.clawchat.io`)
 - **Self-hosted**: Users can run their own relay (single binary / Docker image)
-- **Config**: `openclaw config set channels.clawchat.relay wss://my-relay.example.com`
+- **Config**: Set `relay` in `plugins.entries.clawchat.config.relay` in openclaw.json
 
 ### Technology Choices
 
@@ -62,23 +66,50 @@ The cloud relay service. Analogous to Telegram Bot API or Discord Gateway -- it'
 
 ## 2. Channel Plugin (Gateway Side)
 
-A standard OpenClaw channel plugin at `extensions/clawchat/` in the OpenClaw repo. Structured identically to `extensions/telegram/` or `extensions/zalouser/`.
+An independent OpenClaw channel plugin published as [`@claw-os/clawchat`](https://www.npmjs.com/package/@claw-os/clawchat) on npm. Plugin id in openclaw.json is `clawchat`.
+
+### Installation
+
+One-command setup via npx:
+
+```bash
+npx @claw-os/clawchat install
+```
+
+This automatically:
+1. Generates a gateway token (UUID, persisted to config)
+2. Writes plugin config to `~/.openclaw/openclaw.json`
+3. Installs the plugin to `~/.openclaw/extensions/clawchat/`
+4. Restarts the gateway
+5. Requests a pairing code and displays a QR code in terminal
 
 ### Plugin Structure
 
 ```
-extensions/clawchat/
+plugin/
 ├── package.json
+├── openclaw.plugin.json    # Plugin manifest (id: clawchat)
+├── bin/
+│   └── clawchat.mjs        # CLI installer & pairing tool
 ├── src/
-│   ├── channel.ts          # ChannelPlugin definition
-│   ├── gateway.ts          # startAccount/stopAccount (WebSocket to relay)
-│   ├── outbound.ts         # sendText/sendMedia/sendPoll
-│   ├── inbound.ts          # Process messages from app via relay
-│   ├── actions.ts          # Message actions (react, edit, delete, etc.)
-│   ├── streaming.ts        # Streaming event forwarding
-│   └── protocol.ts         # Shared protocol types
+│   ├── index.ts             # Plugin entry (register service + /clawchat command)
+│   ├── gateway.ts           # WebSocket connection to relay
+│   ├── pair.ts              # Pairing code request via relay API
+│   ├── qr.ts                # QR code terminal display
+│   ├── runtime.ts           # Runtime reference holder
+│   └── types.ts             # ClawChatAccount type
 └── tsconfig.json
 ```
+
+### Gateway Identity
+
+The `gatewayId` is derived from the gateway token, not hardcoded:
+
+```typescript
+const gatewayId = `gw-${crypto.createHash("sha256").update(gatewayToken).digest("hex").slice(0, 12)}`;
+```
+
+Each user's token is unique (auto-generated UUID), so gatewayId is unique per installation.
 
 ### Capabilities (ALL enabled)
 
@@ -150,7 +181,6 @@ Any application that implements the ClawChat wire protocol. The protocol is the 
 |----------|-----------|----------|
 | iOS | SwiftUI | Phase 2 (primary) |
 | Android | Jetpack Compose | Phase 2 (primary) |
-| CLI | Node.js/Bun | Phase 1 (testing) |
 | Web | React / Vue | Phase 3 (optional) |
 
 ### Client Responsibilities
