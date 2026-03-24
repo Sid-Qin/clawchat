@@ -36,11 +36,13 @@ jobs:
           if echo "$FULL" | grep -qE '20[0-9]{6}\.[0-9]+'; then
             DATE_PART=$(echo "$FULL" | grep -oE '20[0-9]{6}')
             SEQ_PART=$(echo "$FULL" | grep -oE '20[0-9]{6}\.([0-9]+)' | sed 's/.*\.//')
+            SEQ_PART=$(printf '%02d' "$SEQ_PART")
             BUILD="${DATE_PART}${SEQ_PART}"
           elif echo "$FULL" | grep -qE '20[0-9]{6}'; then
-            BUILD=$(echo "$FULL" | grep -oE '20[0-9]{6}')
+            DATE_PART=$(echo "$FULL" | grep -oE '20[0-9]{6}')
+            BUILD="${DATE_PART}01"
           else
-            BUILD=$(date +%Y%m%d)1
+            BUILD=$(date +%Y%m%d)01
           fi
 
           # Full version string for display (e.g. 0.0.1-beta.20260319.5)
