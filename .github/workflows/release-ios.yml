@@ -142,7 +142,8 @@ jobs:
             CURRENT_PROJECT_VERSION="${BUILD}" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="ClawChat App Store"
+            PROVISIONING_PROFILE_SPECIFIER="ClawChat App Store" \
+            SWIFT_STRICT_CONCURRENCY=minimal
 
       - name: Export IPA
         working-directory: ios
