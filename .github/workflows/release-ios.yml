@@ -74,7 +74,7 @@ jobs:
 
   # ── iOS IPA (cloud signing + TestFlight) ─────────────────────
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-15
     needs: prepare
     steps:
       - uses: actions/checkout@v4
@@ -143,9 +143,7 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="LBN3W98T26" \
-            PROVISIONING_PROFILE_SPECIFIER="ClawChat App Store" \
-            -skipPackagePluginValidation \
-            OTHER_SWIFT_FLAGS='$(inherited) -Xfrontend -strict-concurrency=minimal'
+            PROVISIONING_PROFILE_SPECIFIER="ClawChat App Store"
 
       - name: Export IPA
         working-directory: ios
