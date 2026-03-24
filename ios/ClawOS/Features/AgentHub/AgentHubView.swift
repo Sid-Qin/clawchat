@@ -25,7 +25,7 @@ struct AgentHubView: View {
                 carousel
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
             LinearGradient(
                 colors: [
@@ -56,30 +56,22 @@ struct AgentHubView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("Agents")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundStyle(.primary)
-                    if !allAgents.isEmpty {
-                        Text("\(allAgents.count)")
-                            .font(.system(size: 20, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                
-                Spacer()
-                
-                NavigationLink {
-                    SettingsView()
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 22, weight: .regular))
-                        .foregroundStyle(.primary)
-                }
-            }
+        HStack(alignment: .center) {
             gatewayPicker
+
+            Text("Agents")
+                .font(.system(size: 32, weight: .bold))
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            NavigationLink {
+                SettingsView()
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundStyle(.primary)
+            }
         }
         .padding(.horizontal, AppTheme.Spacing.xl)
         .padding(.top, 16)
@@ -110,18 +102,11 @@ struct AgentHubView: View {
                 }
             }
         } label: {
-            HStack(spacing: 5) {
-                gwStatusDot
-                Image(systemName: currentGwIcon)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(Color(.quaternarySystemFill)))
+            Image(systemName: currentGwIcon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 32, height: 32)
+                .adaptiveGlass(in: .circle)
         }
     }
 
@@ -200,25 +185,23 @@ struct AgentHubView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Spacer()
+        VStack(spacing: 12) {
             Image(systemName: "person.crop.circle.badge.questionmark")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 56, height: 56)
+                .frame(width: 44, height: 44)
                 .foregroundStyle(Color(.systemGray3))
             VStack(spacing: 6) {
                 Text("暂无 Agent")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color(.secondaryLabel))
                 Text("连接 Gateway 后将自动加载 Agent 列表")
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .font(.caption)
+                    .foregroundStyle(Color(.tertiaryLabel))
                     .multilineTextAlignment(.center)
             }
-            Spacer()
         }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, AppTheme.Spacing.xl)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .offset(y: -40)
     }
 }

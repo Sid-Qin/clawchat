@@ -46,13 +46,7 @@ struct ClawOSApp: App {
                 .ignoresSafeArea()
             }
             .onAppear {
-                if hasLoggedIn {
-                    showLogin = false
-                    showSplash = true
-                    finishSplashAfterDelay()
-                } else {
-                    showLogin = true
-                }
+                showLogin = true
             }
             .task {
                 appState.clawChatManager.appState = appState
