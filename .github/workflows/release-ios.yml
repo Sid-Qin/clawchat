@@ -144,7 +144,8 @@ jobs:
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="LBN3W98T26" \
             PROVISIONING_PROFILE_SPECIFIER="ClawChat App Store" \
-            SWIFT_STRICT_CONCURRENCY=minimal
+            SWIFT_STRICT_CONCURRENCY=minimal \
+            SWIFT_DEFAULT_ACTOR_ISOLATION=nonisolated
 
       - name: Export IPA
         working-directory: ios
