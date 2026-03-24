@@ -1,7 +1,7 @@
 import Foundation
 import ClawChatKit
 
-@Observable
+@MainActor @Observable
 final class ClawChatManager: @unchecked Sendable {
 
     enum LinkState: Equatable {

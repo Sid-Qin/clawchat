@@ -3,7 +3,7 @@ import Observation
 
 /// Observable chat state manager that processes WebSocket messages
 /// and maintains UI-ready state for SwiftUI binding.
-@Observable
+@MainActor @Observable
 public final class ChatState: @unchecked Sendable {
     // MARK: - Observable state
 
