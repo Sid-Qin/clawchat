@@ -79,6 +79,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Select Xcode 16.2
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
       - name: Install Apple certificates
         env:
           APPLE_DIST_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
