@@ -69,6 +69,14 @@ function buildAgentDescriptors(cfg: any): { agents: string[]; agentsMeta: Record
   return { agents, agentsMeta };
 }
 
+// Shared reference to the relay send function so hooks can emit tool events
+let relaySend: ((msg: unknown) => void) | null = null;
+let relayIsReady = false;
+
+export function getRelaySend(): ((msg: unknown) => void) | null {
+  return relayIsReady ? relaySend : null;
+}
+
 export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
   const { account, abortSignal, log } = ctx;
   const { relay: relayUrl, token: gatewayToken, session: sessionKey } = account;
@@ -124,6 +132,7 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
     relayWs.addEventListener("close", () => {
       log?.info?.("[clawchat] Relay disconnected");
       relayReady = false;
+      relayIsReady = false;
       stopPing();
       stopPairingRefresh();
       if (!abortSignal.aborted) setTimeout(connect, 5000);
@@ -142,6 +151,9 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
     }
   }
 
+  // Expose send for tool hooks
+  relaySend = send;
+
   // ------------------------------------------------------------------
   // Relay message handling
   // ------------------------------------------------------------------
@@ -151,6 +163,7 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
       case "gateway.registered":
         log?.info?.(`[clawchat] Registered. Paired devices: ${msg.pairedDevices}`);
         relayReady = true;
+        relayIsReady = true;
         requestPairingCode();
         startPairingRefresh();
         break;
@@ -234,20 +247,8 @@ export async function startClawChatGateway(ctx: GatewayCtx): Promise<void> {
             const text: string | undefined = payload?.text ?? payload?.body;
             if (!relayReady) return;
 
-            if (info?.kind === "tool" && text) {
-              // Forward tool output as tool.event
-              send({
-                type: "tool.event",
-                id: crypto.randomUUID(),
-                ts: Date.now(),
-                tool: "tool",
-                phase: "result",
-                label: "Tool",
-                result: text,
-              });
-              return;
-            }
-
+            // Tool text output is still delivered here as part of the message stream.
+            // Tool lifecycle events (start/result) are handled by hooks separately.
             if (!text) return;
 
             // Send streaming first to create the message, then done to finalize

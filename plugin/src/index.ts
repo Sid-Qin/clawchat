@@ -15,7 +15,7 @@
 
 import crypto from "node:crypto";
 import { setClawChatRuntime } from "./runtime.js";
-import { startClawChatGateway } from "./gateway.js";
+import { startClawChatGateway, getRelaySend } from "./gateway.js";
 import { handlePairCommand } from "./pair.js";
 import type { ClawChatAccount } from "./types.js";
 
@@ -123,4 +123,49 @@ export default function register(api: any) {
       };
     },
   });
+
+  // Tool lifecycle hooks — emit tool.event messages to paired apps
+  log.info(`[clawchat] api.on available: ${typeof api.on === "function"}`);
+  if (typeof api.on === "function") {
+    log.info("[clawchat] Registering tool hooks");
+    api.on("before_tool_call", (event: any) => {
+      log.info(`[clawchat] before_tool_call: ${event.toolName}`);
+      const send = getRelaySend();
+      if (!send) return;
+      send({
+        type: "tool.event",
+        id: event.toolCallId || crypto.randomUUID(),
+        ts: Date.now(),
+        tool: event.toolName,
+        phase: "start",
+        label: event.toolName,
+      });
+    });
+
+    api.on("after_tool_call", (event: any) => {
+      log.info(`[clawchat] after_tool_call: tool=${event.toolName} callId=${event.toolCallId} duration=${event.durationMs}ms error=${event.error ?? "none"}`);
+      const send = getRelaySend();
+      if (!send) return;
+
+      // Truncate large results for mobile display
+      let result = event.error ?? event.result;
+      if (typeof result === "object") {
+        result = JSON.stringify(result);
+      }
+      if (typeof result === "string" && result.length > 2000) {
+        result = result.slice(0, 2000) + "…";
+      }
+
+      send({
+        type: "tool.event",
+        id: event.toolCallId || crypto.randomUUID(),
+        ts: Date.now(),
+        tool: event.toolName,
+        phase: event.error ? "error" : "result",
+        label: event.toolName,
+        result,
+        durationMs: event.durationMs,
+      });
+    });
+  }
 }
