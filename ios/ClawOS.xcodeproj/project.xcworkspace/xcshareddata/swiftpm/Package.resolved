@@ -33,7 +33,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/whtis/swiftui-messaging-ui",
       "state" : {
-        "revision" : "a08b4b7358840aa1ded73468898f14f64fc84954",
+        "revision" : "2a78133f46bf26e681231b6b34e7be0af98add7a",
         "version" : "1.5.1"
       }
     }
