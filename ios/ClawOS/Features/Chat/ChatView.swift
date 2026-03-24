@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import ClawChatKit
+import MessagingUI
 import PhotosUI
 import UniformTypeIdentifiers
 import Speech
@@ -20,7 +21,6 @@ struct ChatView: View {
     @State private var isVoiceRecording = false
     @State private var isVoiceStarting = false
     @State private var isVoiceCancelActive = false
-    @State private var scrollDebounceTask: Task<Void, Never>?
     @State private var speechService = SpeechRecognitionService()
     @State private var showSpeechPermissionAlert = false
     @State private var speechPermissionMessage = ""
@@ -30,12 +30,14 @@ struct ChatView: View {
     @State private var streamingDisplayText = ""
     @State private var streamingTargetText = ""
     @State private var streamingDisplayTask: Task<Void, Never>?
-    @State private var streamingScrollTask: Task<Void, Never>?
-    @State private var scrollRestoreTask: Task<Void, Never>?
-    @State private var isTrackingScrollAnchor = false
     @State private var isWalkieTalkieRecording = false
     @FocusState private var isInputFocused: Bool
-    @State private var keyboardVisibleHeight: CGFloat = 0
+    @State private var messageDataSource = ListDataSource<MessageBubbleItem>()
+    @State private var tiledScrollPosition = TiledScrollPosition(
+        autoScrollsToBottomOnAppend: true,
+        scrollsToBottomOnReplace: true
+    )
+    @State private var isNearBottom = true
 
     private let hapticRigid = UIImpactFeedbackGenerator(style: .rigid)
     private let hapticSoft = UIImpactFeedbackGenerator(style: .soft)
@@ -91,14 +93,24 @@ struct ChatView: View {
         appState.messages(for: session.id)
     }
 
+    private var sessionLiveMessages: [ChatMessage] {
+        chatManager.liveMessages(for: session.agentId, sessionKey: session.sessionKey)
+    }
+
+    private var isSessionTyping: Bool {
+        chatManager.isTyping(for: session.agentId, sessionKey: session.sessionKey)
+    }
+
     private var previewAssistantMessage: ChatMessage? {
         let storedIds = Set(storedMessages.map(\.id))
-        let agentId = session.agentId
-        return chatManager.liveMessages.last(where: {
+        return sessionLiveMessages.last(where: {
             $0.role == .assistant
             && !storedIds.contains($0.id)
-            && ($0.agentId == nil || $0.agentId == agentId)
         })
+    }
+
+    private var hasTransientAssistantPreview: Bool {
+        previewAssistantMessage != nil || streamingDisplayMessageId != nil
     }
 
     private var renderedMessages: [MessageBubbleItem] {
@@ -111,10 +123,6 @@ struct ChatView: View {
 
     private var isEmpty: Bool {
         renderedMessages.isEmpty
-    }
-
-    private var messageScrollCoordinateSpace: String {
-        "chat-scroll-\(session.id)"
     }
 
     var body: some View {
@@ -173,9 +181,9 @@ struct ChatView: View {
         .onAppear {
             syncSelectedModel()
             syncStreamingDisplayState()
-            isTrackingScrollAnchor = false
             hapticRigid.prepare()
             hapticSoft.prepare()
+            messageDataSource.apply(renderedMessages)
             Task {
                 await speechService.prepareFastStartIfAuthorized()
             }
@@ -195,21 +203,9 @@ struct ChatView: View {
         .onChange(of: storedMessages.count) { _, _ in
             syncStreamingDisplayState()
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
-            updateKeyboardVisibleHeight(from: notification)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            keyboardVisibleHeight = 0
-        }
         .onDisappear {
-            scrollDebounceTask?.cancel()
-            scrollRestoreTask?.cancel()
-            scrollRestoreTask = nil
             streamingDisplayTask?.cancel()
             streamingDisplayTask = nil
-            streamingScrollTask?.cancel()
-            streamingScrollTask = nil
-            keyboardVisibleHeight = 0
         }
         .photosPicker(
             isPresented: $showPhotoPicker,
@@ -297,208 +293,52 @@ struct ChatView: View {
     // MARK: - Messages
 
     private var messageArea: some View {
-        ScrollViewReader { proxy in
-            GeometryReader { scrollGeometry in
-                ScrollView {
-                    let msgs = renderedMessages
-                    let hasContent = !msgs.isEmpty || chatManager.isTyping
-                    if hasContent {
-                        VStack(spacing: 0) {
-                            ForEach(msgs) { message in
-                                MessageBubbleView(
-                                    item: message,
-                                    theme: currentTheme
-                                )
-                                .id(message.id)
-                                .background(messageFrameReporter(for: message.id))
-                            }
-
-                            if chatManager.isTyping {
-                                typingIndicator
-                            }
-
-                            Color.clear
-                                .frame(height: 1)
-                                .id("bottom")
-                        }
-                        .padding(.top, 12)
-                        .padding(.bottom, 16)
-                    }
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .coordinateSpace(name: messageScrollCoordinateSpace)
-                .onAppear {
-                    restoreSavedScrollAnchorIfNeeded(proxy: proxy)
-                }
-                .onChange(of: renderedMessages.map(\.id)) { _, _ in
-                    restoreSavedScrollAnchorIfNeeded(proxy: proxy)
-                }
-                .onPreferenceChange(ChatMessageFramePreferenceKey.self) { frames in
-                    updateStoredScrollAnchor(
-                        with: frames,
-                        viewportHeight: scrollGeometry.size.height
-                    )
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .onChange(of: renderedMessages.count) { _, _ in
-                if ChatAutoScrollPolicy.shouldScrollToBottom(for: .renderedMessagesChanged) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
-                }
-            }
-            .onChange(of: previewAssistantMessage?.id) { _, _ in
-                if ChatAutoScrollPolicy.shouldScrollToBottom(for: .previewAssistantMessageChanged) {
-                    debouncedScrollToBottom(proxy: proxy)
-                }
-            }
-            .onChange(of: streamingDisplayText) { _, _ in
-                if ChatAutoScrollPolicy.shouldScrollToBottom(for: .streamingTextChanged) {
-                    scheduleStreamingScrollToBottom(proxy: proxy)
-                }
-            }
-            .onChange(of: chatManager.isTyping) { _, _ in
-                if ChatAutoScrollPolicy.shouldScrollToBottom(for: .typingStateChanged) {
-                    debouncedScrollToBottom(proxy: proxy)
-                }
-            }
-            .onChange(of: isInputFocused) { _, isFocused in
-                guard isFocused else { return }
-                guard ChatAutoScrollPolicy.shouldScrollToBottom(
-                    for: .inputFocusChanged,
-                    isInputFocused: isFocused
-                ) else {
-                    return
-                }
-                followBottomForComposerIntent(proxy: proxy)
-            }
-            .onChange(of: keyboardVisibleHeight) { oldHeight, newHeight in
-                guard oldHeight <= 0 else { return }
-                guard newHeight > 0 else { return }
-                guard ChatAutoScrollPolicy.shouldScrollToBottom(
-                    for: .keyboardFrameChanged,
-                    isInputFocused: isInputFocused
-                ) else {
-                    return
-                }
-                followBottomForComposerIntent(proxy: proxy)
-            }
-            .onTapGesture {
-                isInputFocused = false
-            }
+        TiledView(
+            dataSource: messageDataSource,
+            scrollPosition: $tiledScrollPosition
+        ) { item in
+            MessageBubbleTiledCell(item: item, theme: currentTheme)
         }
-        .onChange(of: chatManager.liveMessages.count) { _, _ in
+        .typingIndicator(.indicator(isVisible: isSessionTyping) {
+            HStack(alignment: .bottom) {
+                TypingBreathingDotsView()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(Color(.systemGray5))
+                    )
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+        })
+        .onTapBackground {
+            isInputFocused = false
+        }
+        .onDragIntoBottomSafeArea {
+            isInputFocused = false
+        }
+        .onTiledScrollGeometryChange { geometry in
+            let nearBottom = geometry.pointsFromBottom < 100
+            isNearBottom = nearBottom
+            tiledScrollPosition.autoScrollsToBottomOnAppend = nearBottom
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: renderedMessages) { _, newMessages in
+            messageDataSource.apply(newMessages)
+        }
+        .onChange(of: streamingDisplayText) { _, _ in
+            guard isNearBottom, streamingDisplayMessageId != nil else { return }
+            tiledScrollPosition.scrollTo(edge: .bottom, animated: false)
+        }
+        .onChange(of: sessionLiveMessages.count) { _, _ in
             syncLiveMessages()
         }
-        .onChange(of: chatManager.liveMessages.last?.isStreaming) { _, isStreaming in
+        .onChange(of: sessionLiveMessages.last?.isStreaming) { _, isStreaming in
             if isStreaming == false {
                 syncLiveMessages()
             }
-        }
-    }
-
-    private func debouncedScrollToBottom(proxy: ScrollViewProxy) {
-        scrollDebounceTask?.cancel()
-        scrollDebounceTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(140))
-            guard !Task.isCancelled else { return }
-            proxy.scrollTo("bottom", anchor: .bottom)
-        }
-    }
-
-    private func followBottomForComposerIntent(proxy: ScrollViewProxy) {
-        scrollDebounceTask?.cancel()
-        scrollRestoreTask?.cancel()
-        scrollRestoreTask = nil
-        isTrackingScrollAnchor = true
-        withAnimation(.easeOut(duration: 0.2)) {
-            proxy.scrollTo("bottom", anchor: .bottom)
-        }
-    }
-
-    private func scheduleStreamingScrollToBottom(proxy: ScrollViewProxy) {
-        guard streamingScrollTask == nil else { return }
-
-        streamingScrollTask = Task { @MainActor in
-            try? await Task.sleep(for: StreamingTypewriter.followScrollDelay)
-            guard !Task.isCancelled else { return }
-
-            var transaction = Transaction()
-            transaction.animation = nil
-            withTransaction(transaction) {
-                proxy.scrollTo("bottom", anchor: .bottom)
-            }
-
-            streamingScrollTask = nil
-        }
-    }
-
-    @ViewBuilder
-    private func messageFrameReporter(for messageId: String) -> some View {
-        GeometryReader { geometry in
-            Color.clear
-                .preference(
-                    key: ChatMessageFramePreferenceKey.self,
-                    value: [messageId: geometry.frame(in: .named(messageScrollCoordinateSpace))]
-                )
-        }
-    }
-
-    private func restoreSavedScrollAnchorIfNeeded(proxy: ScrollViewProxy) {
-        guard !isTrackingScrollAnchor else { return }
-        guard scrollRestoreTask == nil else { return }
-
-        guard let savedAnchorId = appState.chatScrollAnchor(for: session.id) else {
-            isTrackingScrollAnchor = true
-            return
-        }
-
-        scrollRestoreTask = Task { @MainActor in
-            defer { scrollRestoreTask = nil }
-
-            try? await Task.sleep(for: .milliseconds(24))
-            guard !Task.isCancelled else { return }
-
-            var transaction = Transaction()
-            transaction.animation = nil
-            withTransaction(transaction) {
-                proxy.scrollTo(savedAnchorId, anchor: .top)
-            }
-
-            try? await Task.sleep(for: .milliseconds(24))
-            guard !Task.isCancelled else { return }
-            isTrackingScrollAnchor = true
-        }
-    }
-
-    private func updateStoredScrollAnchor(
-        with frames: [String: CGRect],
-        viewportHeight: CGFloat
-    ) {
-        guard isTrackingScrollAnchor else { return }
-
-        let visibleMessageIds = Set(renderedMessages.map(\.id))
-        let visibleFrames = frames.filter { visibleMessageIds.contains($0.key) }
-        let anchorId = ChatScrollAnchorResolver.anchorMessageID(
-            from: visibleFrames,
-            viewportHeight: viewportHeight
-        )
-        appState.setChatScrollAnchor(anchorId, for: session.id)
-    }
-
-    private func updateKeyboardVisibleHeight(from notification: Notification) {
-        guard let frameValue = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue else {
-            return
-        }
-
-        let screenBounds = UIScreen.main.bounds
-        let keyboardFrame = frameValue.cgRectValue
-        let intersection = screenBounds.intersection(keyboardFrame)
-
-        if keyboardFrame.minY >= screenBounds.maxY - 1 || intersection.isNull || intersection.height < 44 {
-            keyboardVisibleHeight = 0
-        } else {
-            keyboardVisibleHeight = intersection.height
         }
     }
 
@@ -517,7 +357,8 @@ struct ChatView: View {
             attachments: item.attachments,
             toolEvents: item.toolEvents,
             isStreaming: item.isStreaming || shouldKeepTyping,
-            isError: item.isError
+            isError: item.isError,
+            timestamp: item.timestamp
         )
     }
 
@@ -534,7 +375,7 @@ struct ChatView: View {
 
         if let persistedMessage = storedMessages.last(where: { $0.id == currentMessageId }) {
             bindStreamingDisplay(to: currentMessageId, targetText: persistedMessage.text)
-        } else if let liveMessage = chatManager.liveMessages.last(where: { $0.id == currentMessageId }) {
+        } else if let liveMessage = sessionLiveMessages.last(where: { $0.id == currentMessageId }) {
             bindStreamingDisplay(to: currentMessageId, targetText: liveMessage.text)
         } else if streamingDisplayText == streamingTargetText {
             clearStreamingDisplayState()
@@ -591,18 +432,13 @@ struct ChatView: View {
     private func clearStreamingDisplayState() {
         streamingDisplayTask?.cancel()
         streamingDisplayTask = nil
-        streamingScrollTask?.cancel()
-        streamingScrollTask = nil
         streamingDisplayMessageId = nil
         streamingDisplayText = ""
         streamingTargetText = ""
     }
 
     private func syncLiveMessages() {
-        let agentId = session.agentId
-        let live = chatManager.liveMessages.filter {
-            $0.agentId == nil || $0.agentId == agentId
-        }
+        let live = sessionLiveMessages
         let stored = appState.messages(for: session.id)
         let storedIds = Set(stored.map(\.id))
         var newlyPersistedIds = Set<String>()
@@ -633,22 +469,6 @@ struct ChatView: View {
         }
 
         syncStreamingDisplayState()
-    }
-
-    private var typingIndicator: some View {
-        HStack(alignment: .bottom) {
-            TypingBreathingDotsView()
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(Color(.systemGray5))
-                )
-
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
     }
 
     private var emptyStateOverlay: some View {
@@ -946,42 +766,43 @@ struct ChatView: View {
 
     private func modelChip(showChevron: Bool) -> some View {
         HStack(spacing: 4) {
-            Image(systemName: "bolt.fill")
-                .font(.system(size: 11, weight: .semibold))
             Text(modelDisplayTitle(for: selectedModel))
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
-                .minimumScaleFactor(0.9)
             if showChevron {
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 9, weight: .semibold))
             }
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, 10)
-        .frame(height: 32)
-        .frame(minWidth: 106)
+        .frame(height: 30)
         .contentShape(Capsule())
     }
 
     private func modelDisplayTitle(for model: String) -> String {
-        let lower = model.lowercased()
-        if lower.contains("minimax") { return "MiniMax" }
-        if lower.contains("claude") && lower.contains("opus") { return "Opus" }
-        if lower.contains("claude") && lower.contains("sonnet") { return "Sonnet" }
-        if lower.contains("claude") && lower.contains("haiku") { return "Haiku" }
-        if lower.contains("gpt-4o") { return "GPT-4o" }
-        if lower.contains("gpt-4") { return "GPT-4" }
-        if lower.contains("gpt") { return "GPT" }
-        if lower.contains("gemini") { return "Gemini" }
-        if lower.contains("deepseek") { return "DeepSeek" }
-        if lower.contains("qwen") { return "Qwen" }
-        if lower.contains("llama") { return "Llama" }
-
+        var name = model
         if let lastSlash = model.lastIndex(of: "/") {
-            return String(model[model.index(after: lastSlash)...])
+            name = String(model[model.index(after: lastSlash)...])
         }
-        return model
+
+        name = name
+            .replacingOccurrences(of: "-preview", with: "")
+            .replacingOccurrences(of: "-latest", with: "")
+
+        let parts = name.split(separator: "-")
+        if parts.isEmpty { return model }
+
+        var result: [String] = []
+        for part in parts {
+            let s = String(part)
+            if s.allSatisfy({ $0.isNumber || $0 == "." }) {
+                result.append(s)
+            } else {
+                result.append(s.prefix(1).uppercased() + s.dropFirst())
+            }
+        }
+        return result.joined(separator: " ")
     }
 
     private func modelSubtitle(for model: String) -> String {
@@ -1160,10 +981,12 @@ struct ChatView: View {
         chatManager.sendMessage(
             text: text,
             agentId: session.agentId,
+            sessionKey: session.sessionKey,
             attachments: attachments.map(\.protocolAttachment)
         )
         inputText = ""
         composerAttachments.removeAll()
+        tiledScrollPosition.scrollTo(edge: .bottom, animated: true)
     }
 
     private func beginRecording() async {
@@ -1328,39 +1151,6 @@ private enum AttachmentImportError: LocalizedError {
     }
 }
 
-enum ChatScrollAnchorResolver {
-    static func anchorMessageID(
-        from messageFrames: [String: CGRect],
-        viewportHeight: CGFloat
-    ) -> String? {
-        guard viewportHeight > 0 else { return nil }
-
-        return messageFrames
-            .filter { _, frame in
-                frame.maxY > 0 && frame.minY < viewportHeight
-            }
-            .min { lhs, rhs in
-                let lhsDistance = abs(lhs.value.minY)
-                let rhsDistance = abs(rhs.value.minY)
-
-                if lhsDistance == rhsDistance {
-                    return lhs.value.minY < rhs.value.minY
-                }
-
-                return lhsDistance < rhsDistance
-            }?
-            .key
-    }
-}
-
-private struct ChatMessageFramePreferenceKey: PreferenceKey {
-    static var defaultValue: [String: CGRect] = [:]
-
-    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
 // MARK: - Walkie-Talkie Long-Press Gesture (UIKit)
 
 private struct WalkieTalkieGestureView: UIViewRepresentable {
@@ -1383,7 +1173,9 @@ private struct WalkieTalkieGestureView: UIViewRepresentable {
             action: #selector(Coordinator.handleLongPress(_:))
         )
         longPress.minimumPressDuration = 0.4
-        tap.require(toFail: longPress)
+        tap.cancelsTouchesInView = false
+        longPress.cancelsTouchesInView = false
+        longPress.delaysTouchesBegan = false
 
         view.addGestureRecognizer(tap)
         view.addGestureRecognizer(longPress)
@@ -1406,6 +1198,7 @@ private struct WalkieTalkieGestureView: UIViewRepresentable {
         var onDragChanged: (CGFloat) -> Void
         var onRecordEnd: () -> Void
         private var startY: CGFloat = 0
+        private var lastLongPressEndedAt: TimeInterval = -.greatestFiniteMagnitude
 
         init(_ parent: WalkieTalkieGestureView) {
             self.onTap = parent.onTap
@@ -1414,7 +1207,11 @@ private struct WalkieTalkieGestureView: UIViewRepresentable {
             self.onRecordEnd = parent.onRecordEnd
         }
 
-        @objc func handleTap() { onTap() }
+        @objc func handleTap() {
+            let now = ProcessInfo.processInfo.systemUptime
+            guard now - lastLongPressEndedAt > 0.1 else { return }
+            onTap()
+        }
 
         @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
             switch gesture.state {
@@ -1425,6 +1222,7 @@ private struct WalkieTalkieGestureView: UIViewRepresentable {
                 let dy = gesture.location(in: gesture.view).y - startY
                 onDragChanged(dy)
             case .ended, .cancelled, .failed:
+                lastLongPressEndedAt = ProcessInfo.processInfo.systemUptime
                 onRecordEnd()
             default:
                 break

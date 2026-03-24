@@ -13,10 +13,10 @@ struct DashboardView: View {
             headerTabs
 
             TabView(selection: $selectedTab) {
-                feedPage(moments: viewModel.mockMoments)
+                feedPage(moments: viewModel.moments)
                     .tag(0)
 
-                feedPage(moments: viewModel.mockMoments.filter { $0.isFollowed })
+                feedPage(moments: viewModel.moments.filter { $0.isFollowed })
                     .tag(1)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
@@ -29,7 +29,9 @@ struct DashboardView: View {
             )
             .ignoresSafeArea()
         }
+        .ignoresSafeArea(edges: .bottom)
         .toolbar(.hidden, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .tabBar)
     }
 
     // MARK: - Feed Page
@@ -122,7 +124,7 @@ struct DashboardView: View {
                     .frame(height: gridHeight(for: moments))
                 }
 
-                Spacer().frame(height: 100)
+                Color.clear.frame(height: 16)
             }
         }
         .refreshable {

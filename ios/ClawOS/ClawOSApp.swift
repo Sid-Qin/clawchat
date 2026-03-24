@@ -1,5 +1,19 @@
 import SwiftUI
 
+enum AppLaunchPresentation {
+    static func initialVisibility(hasLoggedIn: Bool) -> (
+        showSplash: Bool,
+        showLogin: Bool,
+        isSplashDone: Bool
+    ) {
+        if hasLoggedIn {
+            return (showSplash: true, showLogin: false, isSplashDone: false)
+        }
+
+        return (showSplash: false, showLogin: true, isSplashDone: false)
+    }
+}
+
 @main
 struct ClawOSApp: App {
     @State private var appState = AppState()
@@ -46,12 +60,15 @@ struct ClawOSApp: App {
                 .ignoresSafeArea()
             }
             .onAppear {
-                if hasLoggedIn {
-                    showLogin = false
-                    showSplash = true
+                guard showLogin == nil else { return }
+
+                let visibility = AppLaunchPresentation.initialVisibility(hasLoggedIn: hasLoggedIn)
+                showSplash = visibility.showSplash
+                showLogin = visibility.showLogin
+                isSplashDone = visibility.isSplashDone
+
+                if visibility.showSplash {
                     finishSplashAfterDelay()
-                } else {
-                    showLogin = true
                 }
             }
             .task {
@@ -73,8 +90,7 @@ struct ClawOSApp: App {
     }
 
     private func handleLoginComplete() {
-        // Mock 模式：不持久化 hasLoggedIn，每次冷启动都弹登录
-        // 正式接入后取消注释: hasLoggedIn = true
+        hasLoggedIn = true
 
         showSplash = true
 

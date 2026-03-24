@@ -20,6 +20,15 @@ extension View {
         modifier(AdaptiveGlassModifier(shape: shape, interactive: interactive))
     }
 
+    /// Tinted glass effect for prominent CTAs and highlighted controls.
+    func adaptiveTintedGlass(
+        in shape: some InsettableShape,
+        tint: Color,
+        interactive: Bool = false
+    ) -> some View {
+        modifier(AdaptiveTintedGlassModifier(shape: shape, tint: tint, interactive: interactive))
+    }
+
     /// Glass effect with AnyShape (for dynamic shape switching)
     func adaptiveGlassAnyShape(_ shape: AnyShape) -> some View {
         modifier(AdaptiveGlassAnyShapeModifier(shape: shape))
@@ -47,6 +56,48 @@ private struct AdaptiveGlassModifier<S: InsettableShape>: ViewModifier {
         #else
         content
             .background(.ultraThinMaterial, in: shape)
+        #endif
+    }
+}
+
+private struct AdaptiveTintedGlassModifier<S: InsettableShape>: ViewModifier {
+    let shape: S
+    let tint: Color
+    let interactive: Bool
+
+    func body(content: Content) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(
+                    interactive
+                        ? .regular.tint(tint).interactive()
+                        : .regular.tint(tint),
+                    in: shape
+                )
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .overlay {
+                    shape
+                        .fill(tint.opacity(0.22))
+                }
+                .overlay {
+                    shape
+                        .strokeBorder(.white.opacity(0.18), lineWidth: 0.8)
+                }
+        }
+        #else
+        content
+            .background(.ultraThinMaterial, in: shape)
+            .overlay {
+                shape
+                    .fill(tint.opacity(0.22))
+            }
+            .overlay {
+                shape
+                    .strokeBorder(.white.opacity(0.18), lineWidth: 0.8)
+            }
         #endif
     }
 }

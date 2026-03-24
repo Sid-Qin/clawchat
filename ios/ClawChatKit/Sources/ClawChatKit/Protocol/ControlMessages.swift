@@ -13,14 +13,16 @@ public struct Typing: BaseMessage, Sendable {
     public let id: String
     public let ts: Int64
     public let agentId: String?
+    public let sessionKey: String?
     public let active: Bool
     public let label: String?
 
-    public init(agentId: String? = "default", active: Bool) {
+    public init(agentId: String? = "default", sessionKey: String? = nil, active: Bool) {
         self.type = "typing"
         self.id = UUID().uuidString
         self.ts = Int64(Date().timeIntervalSince1970 * 1000)
         self.agentId = agentId
+        self.sessionKey = sessionKey
         self.active = active
         self.label = nil
     }

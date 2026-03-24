@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA1547A32F6656CE00D9B336 /* MessagingUI in Frameworks */ = {isa = PBXBuildFile; productRef = AA1547A22F6656CE00D9B336 /* MessagingUI */; };
 		CC4547A32F6656CE00D9B336 /* ClawChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC4547A22F6656CE00D9B336 /* ClawChatKit */; };
 /* End PBXBuildFile section */
 
@@ -57,6 +58,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CC4547A32F6656CE00D9B336 /* ClawChatKit in Frameworks */,
+				AA1547A32F6656CE00D9B336 /* MessagingUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -118,6 +120,7 @@
 			name = ClawOS;
 			packageProductDependencies = (
 				CC4547A22F6656CE00D9B336 /* ClawChatKit */,
+				AA1547A22F6656CE00D9B336 /* MessagingUI */,
 			);
 			productName = ClawOS;
 			productReference = 8D4547D92F6656CE00D9B336 /* ClawOS.app */;
@@ -203,6 +206,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				CC4547A12F6656CE00D9B336 /* XCLocalSwiftPackageReference "ClawChatKit" */,
+				AA1547A12F6656CE00D9B336 /* XCRemoteSwiftPackageReference "swiftui-messaging-ui" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8D4547DA2F6656CE00D9B336 /* Products */;
@@ -409,6 +413,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "ClawChat needs camera access to scan pairing QR codes.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "ClawOS needs access to the local network to connect to OpenClaw Gateway";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ClawOS needs access to the microphone for voice input";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "ClawOS needs speech recognition to convert voice to text";
@@ -446,6 +452,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "ClawChat needs camera access to scan pairing QR codes.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "ClawOS needs access to the local network to connect to OpenClaw Gateway";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ClawOS needs access to the microphone for voice input";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "ClawOS needs speech recognition to convert voice to text";
@@ -599,7 +607,23 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		AA1547A12F6656CE00D9B336 /* XCRemoteSwiftPackageReference "swiftui-messaging-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidGroup/swiftui-messaging-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.5.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		AA1547A22F6656CE00D9B336 /* MessagingUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA1547A12F6656CE00D9B336 /* XCRemoteSwiftPackageReference "swiftui-messaging-ui" */;
+			productName = MessagingUI;
+		};
 		CC4547A22F6656CE00D9B336 /* ClawChatKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ClawChatKit;

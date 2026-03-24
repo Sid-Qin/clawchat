@@ -22,8 +22,9 @@ public final class ChatState: @unchecked Sendable {
     private var messageLoopTask: Task<Void, Never>?
     private var stateObserverTask: Task<Void, Never>?
 
-    // Track in-progress streaming message by agentId
-    private var streamingMessageId: String?
+    // Track in-progress streaming messages and typing state by route.
+    private var streamingMessageIdByRoute: [ChatRoute: String] = [:]
+    private var activeTypingRoutes = Set<ChatRoute>()
 
     // MARK: - Init
 
@@ -34,12 +35,14 @@ public final class ChatState: @unchecked Sendable {
     // MARK: - Lifecycle
 
     /// Start listening to the WebSocket message stream and connection state.
+    @MainActor
     public func start() {
         startMessageLoop()
         startStateObserver()
     }
 
     /// Stop listening and clean up.
+    @MainActor
     public func stop() {
         messageLoopTask?.cancel()
         messageLoopTask = nil
@@ -47,16 +50,28 @@ public final class ChatState: @unchecked Sendable {
         stateObserverTask = nil
     }
 
+    @MainActor
     public func setGatewayOnline(_ isOnline: Bool) {
         gatewayOnline = isOnline
     }
 
     /// Remove completed (non-streaming) messages that have been persisted.
     /// Call this after syncing live messages to storage to prevent replay on re-enter.
+    @MainActor
     public func clearCompletedMessages(persistedIds: Set<String>) {
         messages.removeAll { msg in
             !msg.isStreaming && persistedIds.contains(msg.id)
         }
+    }
+
+    @MainActor
+    public func liveMessages(for agentId: String, sessionKey: String?) -> [ChatMessage] {
+        messages.filter { $0.route.matches(targetAgentId: agentId, targetSessionKey: sessionKey) }
+    }
+
+    @MainActor
+    public func isTyping(for agentId: String, sessionKey: String?) -> Bool {
+        activeTypingRoutes.contains { $0.matches(targetAgentId: agentId, targetSessionKey: sessionKey) }
     }
 
     static func mergeStreamingText(current: String, incoming: String) -> String {
@@ -83,20 +98,23 @@ public final class ChatState: @unchecked Sendable {
     // MARK: - Send
 
     /// Send a user message. Appends to messages and sends to relay.
+    @MainActor
     public func sendMessage(
         text: String,
         agentId: String = "default",
+        sessionKey: String? = nil,
         attachments: [MessageAttachment] = []
     ) {
-        let userMessage = ChatMessage(role: .user, text: text, agentId: agentId)
+        let userMessage = ChatMessage(role: .user, text: text, agentId: agentId, sessionKey: sessionKey)
         messages.append(userMessage)
 
         let inbound = MessageInbound(
             text: text.isEmpty ? nil : text,
             agentId: agentId,
-            attachments: attachments.isEmpty ? nil : attachments
+            attachments: attachments.isEmpty ? nil : attachments,
+            sessionKey: sessionKey
         )
-        print("[ChatState] sendMessage: agentId=\(agentId) text=\(text.prefix(40))")
+        print("[ChatState] sendMessage: agentId=\(agentId) sessionKey=\(sessionKey ?? "-") text=\(text.prefix(40))")
         Task {
             await client.send(inbound)
         }
@@ -124,10 +142,26 @@ public final class ChatState: @unchecked Sendable {
             guard let self else { return }
             await self.client.onStateChange { [weak self] state in
                 Task { @MainActor in
-                    self?.connectionState = state
+                    guard let self else { return }
+                    self.connectionState = state
+                    if state == .disconnected {
+                        self.cleanUpStaleStreamingState()
+                    }
                 }
             }
         }
+    }
+
+    @MainActor
+    private func cleanUpStaleStreamingState() {
+        for (_, messageId) in streamingMessageIdByRoute {
+            if let idx = messages.firstIndex(where: { $0.id == messageId }) {
+                messages[idx].isStreaming = false
+            }
+        }
+        streamingMessageIdByRoute.removeAll()
+        activeTypingRoutes.removeAll()
+        refreshTypingState()
     }
 
     @MainActor
@@ -158,12 +192,16 @@ public final class ChatState: @unchecked Sendable {
 
     @MainActor
     private func handleStream(_ stream: MessageStream) {
-        // Typing stops when stream starts
-        isTyping = false
+        let route = ChatRoute(agentId: stream.agentId, sessionKey: stream.sessionKey)
+        activeTypingRoutes.remove(route)
+        refreshTypingState()
 
         switch stream.phase {
         case .streaming:
             if let idx = messages.firstIndex(where: { $0.id == stream.id }) {
+                messages[idx].agentId = stream.agentId ?? messages[idx].agentId
+                messages[idx].sessionKey = stream.sessionKey ?? messages[idx].sessionKey
+                messages[idx].isStreaming = true
                 messages[idx].text = Self.mergeStreamingText(
                     current: messages[idx].text,
                     incoming: stream.delta
@@ -175,30 +213,35 @@ public final class ChatState: @unchecked Sendable {
                     role: .assistant,
                     text: stream.delta,
                     isStreaming: true,
-                    agentId: stream.agentId
+                    agentId: stream.agentId,
+                    sessionKey: stream.sessionKey
                 )
                 messages.append(msg)
-                streamingMessageId = stream.id
             }
+            streamingMessageIdByRoute[route] = stream.id
 
         case .done:
             if let idx = messages.firstIndex(where: { $0.id == stream.id }) {
+                messages[idx].agentId = stream.agentId ?? messages[idx].agentId
+                messages[idx].sessionKey = stream.sessionKey ?? messages[idx].sessionKey
                 if let finalText = stream.finalText {
                     messages[idx].text = finalText
                 }
                 messages[idx].isStreaming = false
             }
-            if streamingMessageId == stream.id {
-                streamingMessageId = nil
+            if streamingMessageIdByRoute[route] == stream.id {
+                streamingMessageIdByRoute.removeValue(forKey: route)
             }
 
         case .error:
             if let idx = messages.firstIndex(where: { $0.id == stream.id }) {
+                messages[idx].agentId = stream.agentId ?? messages[idx].agentId
+                messages[idx].sessionKey = stream.sessionKey ?? messages[idx].sessionKey
                 messages[idx].isError = true
                 messages[idx].isStreaming = false
             }
-            if streamingMessageId == stream.id {
-                streamingMessageId = nil
+            if streamingMessageIdByRoute[route] == stream.id {
+                streamingMessageIdByRoute.removeValue(forKey: route)
             }
         }
     }
@@ -208,7 +251,8 @@ public final class ChatState: @unchecked Sendable {
     @MainActor
     private func handleReasoning(_ reasoning: MessageReasoning) {
         // Find the current streaming message to attach reasoning
-        guard let id = streamingMessageId,
+        let route = ChatRoute(agentId: reasoning.agentId, sessionKey: reasoning.sessionKey)
+        guard let id = currentStreamingMessageId(for: route),
               let idx = messages.firstIndex(where: { $0.id == id }) else {
             return
         }
@@ -233,7 +277,8 @@ public final class ChatState: @unchecked Sendable {
     @MainActor
     private func handleToolEvent(_ event: ToolEvent) {
         // Attach tool events to current streaming message
-        guard let id = streamingMessageId,
+        let route = ChatRoute(agentId: event.agentId, sessionKey: event.sessionKey)
+        guard let id = currentStreamingMessageId(for: route),
               let msgIdx = messages.firstIndex(where: { $0.id == id }) else {
             return
         }
@@ -262,7 +307,13 @@ public final class ChatState: @unchecked Sendable {
 
     @MainActor
     private func handleTyping(_ typing: Typing) {
-        isTyping = typing.active
+        let route = ChatRoute(agentId: typing.agentId, sessionKey: typing.sessionKey)
+        if typing.active {
+            activeTypingRoutes.insert(route)
+        } else {
+            activeTypingRoutes.remove(route)
+        }
+        refreshTypingState()
     }
 
     // MARK: - Presence (5.8)
@@ -291,5 +342,19 @@ public final class ChatState: @unchecked Sendable {
             isError: true
         )
         messages.append(errorMessage)
+    }
+
+    @MainActor
+    private func currentStreamingMessageId(for route: ChatRoute) -> String? {
+        if let id = streamingMessageIdByRoute[route] {
+            return id
+        }
+
+        return messages.last(where: { $0.isStreaming && $0.route == route })?.id
+    }
+
+    @MainActor
+    private func refreshTypingState() {
+        isTyping = !activeTypingRoutes.isEmpty
     }
 }

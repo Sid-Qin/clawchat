@@ -2,12 +2,10 @@ import SwiftUI
 
 struct SessionListView: View {
     @Environment(AppState.self) private var appState
-    @State private var searchText = ""
-    @FocusState private var isSearchFocused: Bool
-    var isSidebarDragging = false
+    @Binding var searchText: String
 
     private var filteredSessions: [Session] {
-        let visibleAgentIds = Set(appState.currentGatewayAgents.map(\.id))
+        let visibleAgentIds = Set(appState.selectedAgentIds)
         let gatewaySessions = appState.sessions.filter { visibleAgentIds.contains($0.agentId) }
 
         let sortedSessions = gatewaySessions.sorted { s1, s2 in
@@ -34,13 +32,9 @@ struct SessionListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            topBar
             sessionList
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            isSearchFocused = false
-        }
         .background {
             LinearGradient(
                 colors: [appState.currentVisualTheme.pageGradientTop, appState.currentVisualTheme.pageGradientBottom],
@@ -49,51 +43,6 @@ struct SessionListView: View {
             )
             .ignoresSafeArea()
         }
-    }
-
-    // MARK: - Top Bar
-
-    private var topBar: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                    .font(.system(size: 16))
-
-                TextField("搜索会话", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .focused($isSearchFocused)
-
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.tertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .transition(.scale.combined(with: .opacity))
-                }
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 36)
-            .adaptiveGlass(in: .capsule)
-
-            Button {
-                _ = appState.startNewSession()
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 36, height: 36)
-                    .contentShape(Circle())
-            }
-            .adaptiveGlass(in: .circle)
-        }
-        .padding(.horizontal, AppTheme.Spacing.lg)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-        .animation(.easeInOut(duration: 0.2), value: searchText.isEmpty)
     }
 
     // MARK: - List
@@ -111,7 +60,7 @@ struct SessionListView: View {
                     ) {
                         selectedSession = session
                     }
-                    .disabled(isSidebarDragging)
+                    
                 }
 
                 if filteredSessions.isEmpty {
@@ -119,8 +68,6 @@ struct SessionListView: View {
                 }
             }
         }
-        .scrollDismissesKeyboard(.interactively)
-        .scrollDisabled(isSidebarDragging)
         .scrollDismissesKeyboard(.immediately)
         .navigationDestination(item: $selectedSession) { session in
             ChatView(session: session)
@@ -284,55 +231,57 @@ struct SessionRowContainer: View {
     // MARK: - Foreground Row
 
     private var foregroundRow: some View {
-        SessionRowView(session: session)
-            .background(Color(.systemBackground).opacity(0.001))
-            .contentShape(Rectangle())
-            .offset(x: offset)
-            .gesture(
-                DragGesture(minimumDistance: 14)
-                    .onChanged { value in
-                        let dx = value.translation.width
-                        let dy = value.translation.height
-
-                        if !isDragging {
-                            guard abs(dx) > abs(dy) * 1.3 else { return }
-                            isDragging = true
-                            initialDragOffset = offset
-                            lastHapticStage = SessionSwipeBehavior.stage(for: offset)
-                            selectionHaptic.prepare()
-                            rigidHaptic.prepare()
-                            heavyHaptic.prepare()
-                            activeSwipeId = session.id
-                        }
-
-                        let nextOffset = SessionSwipeBehavior.interactiveOffset(
-                            initialOffset: initialDragOffset,
-                            translation: dx
-                        )
-                        offset = nextOffset
-                        updateHaptics(for: nextOffset)
-                    }
-                    .onEnded { value in
-                        isDragging = false
-                        let predictedOffset = SessionSwipeBehavior.interactiveOffset(
-                            initialOffset: initialDragOffset,
-                            translation: value.predictedEndTranslation.width
-                        )
-                        let target = SessionSwipeBehavior.settleTarget(
-                            currentOffset: offset,
-                            predictedEndOffset: predictedOffset,
-                            velocity: value.velocity.width
-                        )
-                        settle(to: target)
-                    }
-            )
-            .onTapGesture {
-                if offset < -10 {
-                    closeSwipe(animated: true)
-                } else if !isDragging {
-                    onTap()
-                }
+        Button {
+            if offset < -10 {
+                closeSwipe(animated: true)
+            } else if !isDragging {
+                onTap()
             }
+        } label: {
+            SessionRowView(session: session)
+                .background(Color(.systemBackground).opacity(0.001))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .offset(x: offset)
+        .gesture(
+            DragGesture(minimumDistance: 14)
+                .onChanged { value in
+                    let dx = value.translation.width
+                    let dy = value.translation.height
+
+                    if !isDragging {
+                        guard abs(dx) > abs(dy) * 1.3 else { return }
+                        isDragging = true
+                        initialDragOffset = offset
+                        lastHapticStage = SessionSwipeBehavior.stage(for: offset)
+                        selectionHaptic.prepare()
+                        rigidHaptic.prepare()
+                        heavyHaptic.prepare()
+                        activeSwipeId = session.id
+                    }
+
+                    let nextOffset = SessionSwipeBehavior.interactiveOffset(
+                        initialOffset: initialDragOffset,
+                        translation: dx
+                    )
+                    offset = nextOffset
+                    updateHaptics(for: nextOffset)
+                }
+                .onEnded { value in
+                    isDragging = false
+                    let predictedOffset = SessionSwipeBehavior.interactiveOffset(
+                        initialOffset: initialDragOffset,
+                        translation: value.predictedEndTranslation.width
+                    )
+                    let target = SessionSwipeBehavior.settleTarget(
+                        currentOffset: offset,
+                        predictedEndOffset: predictedOffset,
+                        velocity: value.velocity.width
+                    )
+                    settle(to: target)
+                }
+        )
     }
 
     private func togglePin() {

@@ -36,6 +36,14 @@ final class ClawChatManager: @unchecked Sendable {
         chatState?.isTyping ?? false
     }
 
+    func liveMessages(for agentId: String, sessionKey: String?) -> [ChatMessage] {
+        chatState?.liveMessages(for: agentId, sessionKey: sessionKey) ?? []
+    }
+
+    func isTyping(for agentId: String, sessionKey: String?) -> Bool {
+        chatState?.isTyping(for: agentId, sessionKey: sessionKey) ?? false
+    }
+
     var gatewayOnline: Bool {
         chatState?.gatewayOnline ?? false
     }
@@ -82,7 +90,7 @@ final class ClawChatManager: @unchecked Sendable {
             startChatState(client: client)
             chatState?.setGatewayOnline(true)
             linkState = .connected
-            await syncToAppState(
+            syncToAppState(
                 gatewayId: result.gatewayId,
                 relayUrl: relayUrl,
                 agentIds: result.agents ?? ["default"]
@@ -123,7 +131,7 @@ final class ClawChatManager: @unchecked Sendable {
             startChatState(client: client)
             chatState?.setGatewayOnline(result.gatewayOnline)
             linkState = .connected
-            await syncToAppState(
+            syncToAppState(
                 gatewayId: result.gatewayId,
                 relayUrl: relayUrl,
                 agentIds: result.agents ?? ["default"]
@@ -168,6 +176,7 @@ final class ClawChatManager: @unchecked Sendable {
     func sendMessage(
         text: String,
         agentId: String = "default",
+        sessionKey: String? = nil,
         attachments: [MessageAttachment] = []
     ) {
         // If disconnected, try to recover before sending
@@ -180,7 +189,7 @@ final class ClawChatManager: @unchecked Sendable {
                 await webSocketClient?.reconnectIfNeeded()
             }
         }
-        chatState?.sendMessage(text: text, agentId: agentId, attachments: attachments)
+        chatState?.sendMessage(text: text, agentId: agentId, sessionKey: sessionKey, attachments: attachments)
     }
 
     @MainActor
@@ -201,23 +210,22 @@ final class ClawChatManager: @unchecked Sendable {
         chatState = state
 
         state.onAppConnected = { [weak self] connected in
-            guard let self else { return }
-            if let newToken = connected.newDeviceToken {
-                let relayUrl = self.connectedRelayUrl ?? ""
-                try? self.credentialStore.save(
-                    deviceToken: newToken,
-                    relayUrl: relayUrl,
-                    gatewayId: connected.gatewayId
-                )
-                print("[ClawChatManager] token rotated and saved")
-            }
-            self.chatState?.setGatewayOnline(connected.gatewayOnline ?? false)
-            self.linkState = .connected
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let newToken = connected.newDeviceToken {
+                    let relayUrl = self.connectedRelayUrl ?? ""
+                    try? self.credentialStore.save(
+                        deviceToken: newToken,
+                        relayUrl: relayUrl,
+                        gatewayId: connected.gatewayId
+                    )
+                    print("[ClawChatManager] token rotated and saved")
+                }
+                self.chatState?.setGatewayOnline(connected.gatewayOnline ?? false)
+                self.linkState = .connected
 
-            // Refresh agents list (e.g. gateway came online after initial connect)
-            if let agents = connected.agents, !agents.isEmpty,
-               let relayUrl = self.connectedRelayUrl {
-                Task { @MainActor in
+                if let agents = connected.agents, !agents.isEmpty,
+                   let relayUrl = self.connectedRelayUrl {
                     self.syncToAppState(
                         gatewayId: connected.gatewayId,
                         relayUrl: relayUrl,
@@ -228,25 +236,24 @@ final class ClawChatManager: @unchecked Sendable {
         }
 
         state.onStatusResponse = { [weak self] status in
-            guard let self,
-                  let gatewayId = self.connectedGatewayId,
-                  let relayUrl = self.connectedRelayUrl else { return }
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let gatewayId = self.connectedGatewayId,
+                      let relayUrl = self.connectedRelayUrl else { return }
                 self.syncToAppState(
                     gatewayId: gatewayId,
                     relayUrl: relayUrl,
                     agentIds: status.agents ?? [],
                     agentsMeta: status.agentsMeta
                 )
+                print("[ClawChatManager] agents refreshed from status.response: \(status.agents?.count ?? 0) agents")
             }
-            print("[ClawChatManager] agents refreshed from status.response: \(status.agents?.count ?? 0) agents")
         }
 
         state.onFatalError = { [weak self] error in
-            guard let self else { return }
             print("[ClawChatManager] fatal error: \(error.code) — \(error.message)")
-            Task {
-                await self.unpair()
+            Task { [weak self] in
+                await self?.unpair()
             }
         }
 
