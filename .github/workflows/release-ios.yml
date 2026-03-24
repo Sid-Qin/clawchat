@@ -142,6 +142,7 @@ jobs:
             CURRENT_PROJECT_VERSION="${BUILD}" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
+            DEVELOPMENT_TEAM="LBN3W98T26" \
             PROVISIONING_PROFILE_SPECIFIER="ClawChat App Store"
 
       - name: Export IPA
