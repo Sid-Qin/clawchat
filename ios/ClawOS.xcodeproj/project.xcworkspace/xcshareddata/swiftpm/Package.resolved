@@ -31,10 +31,10 @@
     {
       "identity" : "swiftui-messaging-ui",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/FluidGroup/swiftui-messaging-ui",
+      "location" : "https://github.com/whtis/swiftui-messaging-ui",
       "state" : {
-        "revision" : "782980cb458dfdce795a3643a769099aa4025349",
-        "version" : "1.5.0"
+        "revision" : "a08b4b7358840aa1ded73468898f14f64fc84954",
+        "version" : "1.5.1"
       }
     }
   ],

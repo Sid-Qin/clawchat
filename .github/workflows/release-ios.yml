@@ -74,13 +74,10 @@ jobs:
 
   # ── iOS IPA (cloud signing + TestFlight) ─────────────────────
   build-ios:
-    runs-on: macos-15
+    runs-on: macos-latest
     needs: prepare
     steps:
       - uses: actions/checkout@v4
-
-      - name: Select Xcode 16.2
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
 
       - name: Install Apple certificates
         env:

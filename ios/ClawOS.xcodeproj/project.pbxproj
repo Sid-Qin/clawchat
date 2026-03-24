@@ -610,7 +610,7 @@
 /* Begin XCRemoteSwiftPackageReference section */
 		AA1547A12F6656CE00D9B336 /* XCRemoteSwiftPackageReference "swiftui-messaging-ui" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/FluidGroup/swiftui-messaging-ui";
+			repositoryURL = "https://github.com/whtis/swiftui-messaging-ui";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 1.5.0;
