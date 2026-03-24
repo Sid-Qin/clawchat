@@ -1,5 +1,6 @@
 import SwiftUI
 import ClawChatKit
+import MessagingUI
 
 struct AgentAvatarView: View {
     var agentId: String?
@@ -298,6 +299,16 @@ struct EquatableMessageBubbleRow: View, Equatable {
     }
 
     var body: some View {
+        MessageBubbleView(item: item, theme: theme)
+    }
+}
+
+struct MessageBubbleTiledCell: TiledCellContent {
+    typealias StateValue = Void
+    let item: MessageBubbleItem
+    let theme: AppVisualTheme
+
+    func body(context: CellContext<Void>) -> some View {
         MessageBubbleView(item: item, theme: theme)
     }
 }

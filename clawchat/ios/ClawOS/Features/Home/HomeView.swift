@@ -20,6 +20,11 @@ struct HomeView: View {
                 .onTapGesture {
                     isSearchFocused = false
                     isSearchExpanded = false
+                    if dragCoordinator.isEditMode {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            dragCoordinator.isEditMode = false
+                        }
+                    }
                 }
 
             if folderOverlayActive,
@@ -166,15 +171,11 @@ struct HomeView: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                connectionDot
-                Image(systemName: gwTypeIcon)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.primary)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 36)
-            .adaptiveGlass(in: .capsule)
+            Image(systemName: gwTypeIcon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .adaptiveGlass(in: .circle)
         }
     }
 

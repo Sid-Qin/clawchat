@@ -2,11 +2,13 @@ import SwiftUI
 
 struct AgentProfileView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     @State private var showAvatarPicker = false
     @State private var avatarRefreshToken = UUID()
     @State private var isAdvancedExpanded = false
     @State private var showAgentSwitcher = false
     @State private var agentNameButtonHeight: CGFloat = 0
+    @State private var showDeleteConfirmation = false
 
     var agentId: String?
 
@@ -440,6 +442,40 @@ struct AgentProfileView: View {
                     }
                 }
                 .padding(.top, 4)
+
+                Divider()
+                    .padding(.vertical, 4)
+
+                Button {
+                    showDeleteConfirmation = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 13, weight: .regular))
+                        Text("删除此 Agent")
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .alert("确认删除", isPresented: $showDeleteConfirmation) {
+                    Button("取消", role: .cancel) {}
+                    Button("删除", role: .destructive) {
+                        if let id = currentAgent?.id {
+                            appState.deleteAgent(id: id)
+                            dismiss()
+                        }
+                    }
+                } message: {
+                    if let agent = currentAgent {
+                        let count = appState.sessions.filter { $0.agentId == agent.id }.count
+                        if count > 0 {
+                            Text("「\(agent.name)」及其 \(count) 个会话将被永久删除，此操作不可撤销。")
+                        } else {
+                            Text("「\(agent.name)」将被永久删除，此操作不可撤销。")
+                        }
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -593,9 +629,19 @@ struct AvatarPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { commitAndDismiss() }
-                        .fontWeight(.semibold)
-                        .disabled(!hasPendingChange)
+                    Button {
+                        commitAndDismiss()
+                    } label: {
+                        Text("完成")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 7)
+                            .background(hasPendingChange ? accent : Color(.systemGray4), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!hasPendingChange)
+                    .animation(.easeInOut(duration: 0.2), value: hasPendingChange)
                 }
             }
         }
