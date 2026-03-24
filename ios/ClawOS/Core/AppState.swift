@@ -380,6 +380,42 @@ final class AppState {
         persistAgentAvatars()
     }
 
+    func deleteAgent(id: String) {
+        AvatarStorage.remove(for: id)
+
+        let relatedSessionIds = sessions.filter { $0.agentId == id }.map(\.id)
+        for sessionId in relatedSessionIds {
+            deleteSession(id: sessionId)
+        }
+
+        agents.removeAll { $0.id == id }
+        persistAgentAvatars()
+
+        agentStripItems.removeAll { item in
+            switch item {
+            case .single(let agentId): return agentId == id
+            case .group(var group):
+                group.agentIds.removeAll { $0 == id }
+                return group.agentIds.isEmpty
+            }
+        }
+        for idx in agentStripItems.indices {
+            if case .group(var group) = agentStripItems[idx] {
+                group.agentIds.removeAll { $0 == id }
+                if group.agentIds.count == 1 {
+                    agentStripItems[idx] = .single(agentId: group.agentIds[0])
+                } else {
+                    agentStripItems[idx] = .group(group)
+                }
+            }
+        }
+        persistStripItems()
+
+        if selectedAgentId == id {
+            selectedAgentId = agents.first?.id ?? ""
+        }
+    }
+
     func markGatewayOffline(_ gatewayId: String) {
         if let idx = gateways.firstIndex(where: { $0.id == gatewayId }) {
             gateways[idx].status = .offline

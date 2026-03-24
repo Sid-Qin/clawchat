@@ -49,9 +49,23 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(isDarkMode ? .dark : nil)
+        .onAppear {
+            configureTabBarAppearance()
+        }
         .onChange(of: effectiveColorScheme, initial: true) { _, newScheme in
             appState.colorScheme = newScheme
         }
+    }
+
+    private func configureTabBarAppearance() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithTransparentBackground()
+        appearance.backgroundColor = .clear
+        appearance.backgroundEffect = nil
+        appearance.shadowColor = .clear
+
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
     }
 }
 

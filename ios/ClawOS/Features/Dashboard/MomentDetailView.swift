@@ -96,7 +96,6 @@ struct MomentDetailOverlay: View {
 }
 
 struct MomentDetailView: View {
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(AppState.self) private var appState
 
     let moment: MockMoment
@@ -104,8 +103,14 @@ struct MomentDetailView: View {
     var onDismiss: () -> Void
 
     @State private var isLiked: Bool
+    @State private var showHireConfirmation = false
+    @State private var cardPullUp: CGFloat = 0
+    @State private var lastCardPullUp: CGFloat = 0
 
-    private var theme: AppVisualTheme { appState.currentVisualTheme }
+    private let minCardPull: CGFloat = 0
+    private let maxCardPull: CGFloat = UIScreen.main.bounds.height * 0.45
+
+    private var pullProgress: CGFloat { min(1, cardPullUp / maxCardPull) }
 
     init(moment: MockMoment, selectedImageIndex: Binding<Int>, onDismiss: @escaping () -> Void) {
         self.moment = moment
@@ -114,100 +119,162 @@ struct MomentDetailView: View {
         self._isLiked = State(initialValue: moment.isLiked)
     }
 
+    private var gradientTop: Color {
+        Color(hex: moment.coverGradient.first ?? "667eea")
+    }
+
+    private var gradientBottom: Color {
+        Color(hex: moment.coverGradient.last ?? "764ba2")
+    }
+
+    private var ctaColor: Color {
+        appState.currentVisualTheme.accent
+    }
+
+    private var safeBottomInset: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.first?.keyWindow?.safeAreaInsets.bottom ?? 0
+    }
+
+    private var ctaBottomPadding: CGFloat {
+        max(16, min(20, safeBottomInset))
+    }
+
+    private var ctaReservedHeight: CGFloat {
+        58 + ctaBottomPadding
+    }
+
+    private var displayLikes: String {
+        let count = moment.likes + (isLiked && !moment.isLiked ? 1 : 0) - (!isLiked && moment.isLiked ? 1 : 0)
+        if count >= 10000 { return String(format: "%.1fw", Double(count) / 10000) }
+        if count >= 1000 { return String(format: "%.1fk", Double(count) / 1000) }
+        return "\(count)"
+    }
+
     var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                Color.black.ignoresSafeArea()
+        ZStack {
+            fullScreenCover()
 
-                fullScreenImageCarousel()
-
-                bottomFadeGradient(screenHeight: proxy.size.height)
-
-                VStack(spacing: 0) {
-                    topOverlay()
-                    Spacer()
-                    informationCard
-                }
+            VStack {
+                Spacer()
+                LinearGradient(
+                    colors: [.clear, Color.black.opacity(0.6)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 200)
             }
-            .frame(width: proxy.size.width, height: proxy.size.height)
             .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                topOverlay()
+                Spacer()
+                informationCard
+            }
         }
         .ignoresSafeArea()
         .navigationBarHidden(true)
         .toolbar(.hidden, for: .tabBar)
     }
 
-    // MARK: - Adaptive Colors
+    // MARK: - Full-Screen Cover (URL / Asset / Gradient)
 
-    private var cardBgColor: Color {
-        colorScheme == .dark ? Color(red: 0.08, green: 0.08, blue: 0.1) : Color(.systemBackground)
-    }
-
-    private var primaryTextColor: Color {
-        colorScheme == .dark ? .white : .black
-    }
-
-    private var secondaryTextColor: Color {
-        colorScheme == .dark ? .white.opacity(0.85) : Color(.secondaryLabel)
-    }
-
-    private var ctaColor: Color {
-        let isDark = colorScheme == .dark
-        switch appState.selectedVisualThemeID {
-        case .eva00:
-            return isDark ? Color(red: 0.3, green: 0.6, blue: 1.0) : Color(red: 0.25, green: 0.52, blue: 0.85)
-        case .eva01:
-            return isDark ? Color(red: 0.6, green: 0.3, blue: 1.0) : Color(red: 0.45, green: 0.2, blue: 0.75)
-        case .eva02:
-            return isDark ? Color(red: 1.0, green: 0.35, blue: 0.3) : Color(red: 0.85, green: 0.22, blue: 0.18)
-        case .neutral:
-            return isDark ? Color.white : Color.black
+    @ViewBuilder
+    private func fullScreenCover() -> some View {
+        let imgs = moment.images.filter { !$0.isEmpty }
+        if imgs.isEmpty {
+            fullScreenGradientCover()
+        } else if imgs.first?.hasPrefix("http") == true {
+            urlImageCarousel(imgs)
+        } else {
+            assetImageCarousel(imgs)
         }
     }
 
-    // MARK: - Full-Screen Image Carousel
-
-    private func fullScreenImageCarousel() -> some View {
+    private func urlImageCarousel(_ urls: [String]) -> some View {
         ZStack {
-            Image(moment.images[selectedImageIndex])
+            if let urlStr = urls[safe: selectedImageIndex],
+               let url = URL(string: urlStr) {
+                RemoteImageView(url: url) { isLoading in
+                    fullScreenGradientCover()
+                        .overlay {
+                            if isLoading {
+                                ProgressView().tint(.white)
+                            }
+                        }
+                }
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                .clipped()
+                .ignoresSafeArea()
+            }
+
+            if urls.count > 1 {
+                TabView(selection: $selectedImageIndex) {
+                    ForEach(0..<urls.count, id: \.self) { index in
+                        Color.clear
+                            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                            .contentShape(Rectangle())
+                            .tag(index)
+                    }
+                }
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .background(Color.clear)
+                .ignoresSafeArea()
+            }
+        }
+    }
+
+    private func assetImageCarousel(_ names: [String]) -> some View {
+        ZStack {
+            Image(names[selectedImageIndex])
                 .resizable()
                 .scaledToFill()
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                 .clipped()
                 .ignoresSafeArea()
 
-            TabView(selection: $selectedImageIndex) {
-                ForEach(0..<moment.images.count, id: \.self) { index in
-                    Color.clear
-                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                        .tag(index)
+            if names.count > 1 {
+                TabView(selection: $selectedImageIndex) {
+                    ForEach(0..<names.count, id: \.self) { index in
+                        Color.clear
+                            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                            .contentShape(Rectangle())
+                            .tag(index)
+                    }
                 }
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .background(Color.clear)
+                .ignoresSafeArea()
             }
-            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .background(Color.clear)
-            .ignoresSafeArea()
         }
     }
 
-    // MARK: - Bottom Fade
+    private func fullScreenGradientCover() -> some View {
+        GeometryReader { geo in
+            ZStack {
+                LinearGradient(
+                    colors: [gradientTop, gradientBottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
 
-    private func bottomFadeGradient(screenHeight: CGFloat) -> some View {
-        VStack {
-            Spacer()
-            LinearGradient(
-                colors: [.clear, cardBgColor.opacity(0.9)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: min(300, screenHeight * 0.36))
+                Circle()
+                    .fill(Color.white.opacity(0.05))
+                    .frame(width: geo.size.width * 1.2)
+                    .offset(x: geo.size.width * 0.3, y: -geo.size.height * 0.15)
+
+                Image(systemName: moment.coverIcon)
+                    .font(.system(size: min(geo.size.width, geo.size.height) * 0.25, weight: .ultraLight))
+                    .foregroundStyle(.white.opacity(0.25))
+                    .offset(y: -geo.size.height * 0.1)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
     }
 
-    // MARK: - Top Overlay (back, pagination, author)
+    // MARK: - Top Overlay
 
     private func topOverlay() -> some View {
         VStack(spacing: 12) {
@@ -215,147 +282,191 @@ struct MomentDetailView: View {
                 Button { onDismiss() } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Color.primary)
+                        .foregroundStyle(.white)
                         .frame(width: 36, height: 36)
                         .background(.ultraThinMaterial, in: Circle())
                 }
 
                 Spacer()
 
-                Button {} label: {
-                    Image(systemName: "ellipsis")
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                        isLiked.toggle()
+                    }
+                } label: {
+                    Image(systemName: isLiked ? "heart.fill" : "heart")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Color.primary)
+                        .foregroundStyle(isLiked ? Color.red : .white)
+                        .frame(width: 36, height: 36)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+
+                Button { shareMoment() } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
                         .frame(width: 36, height: 36)
                         .background(.ultraThinMaterial, in: Circle())
                 }
             }
             .padding(.horizontal, 16)
 
-            if moment.images.count > 1 {
+            let imgCount = moment.images.filter { !$0.isEmpty }.count
+            if imgCount > 1 {
                 HStack(spacing: 6) {
-                    ForEach(0..<moment.images.count, id: \.self) { index in
+                    ForEach(0..<imgCount, id: \.self) { index in
                         Capsule()
-                            .fill(index == selectedImageIndex ? Color.white : Color.white.opacity(0.5))
+                            .fill(index == selectedImageIndex ? Color.white : Color.white.opacity(0.4))
                             .frame(width: index == selectedImageIndex ? 20 : 8, height: 4)
                             .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                             .animation(.easeInOut(duration: 0.2), value: selectedImageIndex)
                     }
                 }
             }
+
         }
-        .padding(.top, 76)
+        .padding(.top, 60)
     }
 
-    // MARK: - Information Card
+    // MARK: - Information Card (pull-up)
 
     private var informationCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 14) {
-                authorRow
+        let baseHeight = UIScreen.main.bounds.height * 0.45
+        let currentHeight = baseHeight + cardPullUp
 
-                HStack(alignment: .top, spacing: 12) {
-                    Text(moment.title)
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(primaryTextColor)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Button {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                            isLiked.toggle()
-                        }
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: isLiked ? "heart.fill" : "heart")
-                                .font(.system(size: 22, weight: .medium))
-                                .foregroundStyle(isLiked ? ctaColor : primaryTextColor.opacity(0.4))
-                            
-                            Text("\(moment.likes + (isLiked && !moment.isLiked ? 1 : 0) - (!isLiked && moment.isLiked ? 1 : 0))")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(secondaryTextColor)
-                        }
-                        .frame(width: 44)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Text(moment.content)
-                    .font(.system(size: 15))
-                    .foregroundStyle(secondaryTextColor)
-                    .lineSpacing(5)
-                    .fixedSize(horizontal: false, vertical: true)
+        return VStack(alignment: .leading, spacing: 0) {
+            // Drag Handle Area
+            VStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 2.5)
+                    .fill(Color.white.opacity(0.2))
+                    .frame(width: 36, height: 5)
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
+                
+                // Add some empty space below the handle to increase the drag target area
+                Color.clear.frame(height: 10)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .gesture(cardDragGesture)
 
-            ctaBar
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 12) {
+                    authorRow
+
+                    Text(moment.title)
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(.white)
+
+                    Text(moment.content)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .lineSpacing(4)
+
+                    engagementRow
+                        .padding(.top, 8)
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, ctaReservedHeight)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .frame(maxWidth: .infinity)
-        .background(cardBackground)
+        .frame(minWidth: 0, maxWidth: .infinity)
+        .frame(height: currentHeight, alignment: .top)
+        .background(
+            ZStack {
+                Color(red: 0.08, green: 0.08, blue: 0.1)
+                    .opacity(0.95)
+
+                LinearGradient(
+                    colors: [Color.black.opacity(0.3), .clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .contentShape(Rectangle())
+            .gesture(cardDragGesture)
+        )
         .clipShape(
             UnevenRoundedRectangle(
                 cornerRadii: .init(
-                    topLeading: 28,
-                    bottomLeading: 0,
-                    bottomTrailing: 0,
-                    topTrailing: 28
+                    topLeading: 0,
+                    bottomLeading: 28,
+                    bottomTrailing: 28,
+                    topTrailing: 0
                 )
             )
         )
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.5 : 0.1), radius: 24, x: 0, y: -10)
+        .shadow(color: Color.black.opacity(0.4), radius: 20, x: 0, y: -8)
+        .padding(.top, -20)
+        .overlay(alignment: .bottom) {
+            ctaBar
+                .padding(.horizontal, 24)
+                .padding(.bottom, ctaBottomPadding)
+        }
     }
 
-    private var cardBackground: some View {
-        ZStack {
-            cardBgColor
-                .opacity(0.95)
+    private var cardDragGesture: some Gesture {
+        DragGesture(coordinateSpace: .global)
+            .onChanged { value in
+                let translation = -value.translation.height // Dragging up = positive translation
+                // completely responsive, no animation delay during drag
+                cardPullUp = max(minCardPull, min(maxCardPull, lastCardPullUp + translation))
+            }
+            .onEnded { value in
+                let velocity = -value.velocity.height
+                let translation = -value.translation.height
+                let projectedPosition = lastCardPullUp + translation + velocity * 0.2
 
-            LinearGradient(
-                colors: [primaryTextColor.opacity(0.03), .clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    if projectedPosition > maxCardPull * 0.3 {
+                        cardPullUp = maxCardPull
+                    } else {
+                        cardPullUp = 0
+                    }
+                    lastCardPullUp = cardPullUp
+                }
+            }
     }
 
     // MARK: - Author Row
 
     private var authorRow: some View {
         HStack(spacing: 10) {
-            Image(moment.authorAvatar)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 34, height: 34)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(primaryTextColor.opacity(0.1), lineWidth: 1))
+            detailAvatarView(size: 34)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(moment.authorName)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(primaryTextColor)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
 
-                Text("今天 14:30")
-                    .font(.system(size: 11))
-                    .foregroundStyle(primaryTextColor.opacity(0.45))
+                HStack(spacing: 4) {
+                    Text(displayLikes)
+                        .font(.system(size: 11, weight: .medium))
+                    Text("likes")
+                        .font(.system(size: 11))
+                    Text("·")
+                    Text(moment.timeAgo)
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(.white.opacity(0.5))
             }
 
             Spacer()
-
-            Button {} label: {
-                Text("关注")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(primaryTextColor)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 7)
-                    .background(primaryTextColor.opacity(0.06))
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule().stroke(primaryTextColor.opacity(0.12), lineWidth: 0.5)
-                    )
-            }
         }
+    }
+
+    // MARK: - Engagement Row
+
+    private var engagementRow: some View {
+        HStack(spacing: 16) {
+            Label("\(moment.comments) 条评论", systemImage: "bubble.right")
+            Label(moment.timeAgo, systemImage: "clock")
+            Spacer()
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(.white.opacity(0.4))
+        .padding(.top, 4)
     }
 
     // MARK: - CTA Bar
@@ -363,24 +474,71 @@ struct MomentDetailView: View {
     private var ctaBar: some View {
         Button {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "square.and.arrow.down.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                Text("获取同款 Agent")
-                    .font(.system(size: 15, weight: .bold))
+            withAnimation(.spring(response: 0.3)) {
+                showHireConfirmation = true
             }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(ctaColor)
-            .clipShape(Capsule())
-            .shadow(color: ctaColor.opacity(0.35), radius: 10, y: 4)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation { showHireConfirmation = false }
+            }
+        } label: {
+            Text(showHireConfirmation ? "已加入候选" : "雇佣 \(moment.authorName)")
+                .font(.system(size: 15, weight: .bold))
+                .lineLimit(1)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .adaptiveTintedGlass(in: Capsule(), tint: ctaColor, interactive: true)
         }
         .buttonStyle(BounceButtonStyle())
-        .padding(.horizontal, 24)
-        .padding(.bottom, 44)
-        .padding(.top, 6)
+    }
+
+    // MARK: - Share
+
+    private func shareMoment() {
+        let text = "\(moment.title)\n\n\(moment.content)\n\n— \(moment.authorName) via ClawOS"
+        let items: [Any] = [text]
+
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let root = windowScene.keyWindow?.rootViewController else { return }
+
+        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        activityVC.popoverPresentationController?.sourceView = root.view
+        activityVC.popoverPresentationController?.sourceRect = CGRect(x: root.view.bounds.midX, y: 60, width: 0, height: 0)
+        root.present(activityVC, animated: true)
+    }
+
+    // MARK: - Avatar
+
+    @ViewBuilder
+    private func detailAvatarView(size: CGFloat) -> some View {
+        if !moment.authorAvatar.isEmpty, UIImage(named: moment.authorAvatar) != nil {
+            Image(moment.authorAvatar)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+        } else {
+            let g0 = Color(hex: moment.avatarGradient.first ?? "667eea")
+            let g1 = Color(hex: moment.avatarGradient.last ?? "764ba2")
+            Circle()
+                .fill(LinearGradient(colors: [g0, g1], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: size, height: size)
+                .overlay(
+                    Image(systemName: moment.coverIcon)
+                        .font(.system(size: size * 0.4, weight: .medium))
+                        .foregroundStyle(.white)
+                )
+                .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+        }
+    }
+}
+
+// MARK: - Safe Array Subscript
+
+private extension Array {
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 
