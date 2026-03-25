@@ -1,4 +1,22 @@
 import SwiftUI
+import UIKit
+
+enum KeyboardPrewarmer {
+    static func warmUp() {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else { return }
+
+        let field = UITextField(frame: CGRect(x: 0, y: -200, width: 1, height: 1))
+        field.autocorrectionType = .no
+        window.addSubview(field)
+        field.becomeFirstResponder()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            field.resignFirstResponder()
+            field.removeFromSuperview()
+        }
+    }
+}
 
 enum AppLaunchPresentation {
     static func initialVisibility(hasLoggedIn: Bool) -> (
@@ -6,10 +24,6 @@ enum AppLaunchPresentation {
         showLogin: Bool,
         isSplashDone: Bool
     ) {
-        if hasLoggedIn {
-            return (showSplash: true, showLogin: false, isSplashDone: false)
-        }
-
         return (showSplash: false, showLogin: true, isSplashDone: false)
     }
 }
@@ -104,6 +118,10 @@ struct ClawOSApp: App {
     }
 
     private func finishSplashAfterDelay() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            KeyboardPrewarmer.warmUp()
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
             withAnimation(.easeOut(duration: 0.4)) {
                 showSplash = false

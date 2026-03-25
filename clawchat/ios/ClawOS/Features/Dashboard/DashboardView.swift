@@ -29,9 +29,7 @@ struct DashboardView: View {
             )
             .ignoresSafeArea()
         }
-        .ignoresSafeArea(edges: .bottom)
         .toolbar(.hidden, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .tabBar)
     }
 
     // MARK: - Feed Page

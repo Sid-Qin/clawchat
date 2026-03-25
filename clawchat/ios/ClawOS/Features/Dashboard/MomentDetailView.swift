@@ -173,7 +173,7 @@ struct MomentDetailView: View {
             }
         }
         .ignoresSafeArea()
-        .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
     }
 
