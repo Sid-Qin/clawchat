@@ -540,9 +540,9 @@ struct SessionRowView: View {
                     .resizable()
                     .scaledToFill()
             } else {
-                Image(systemName: "person.crop.circle.fill")
+                Image("default_agent_avatar")
                     .resizable()
-                    .foregroundStyle(.secondary)
+                    .scaledToFill()
             }
         }
         .frame(width: size, height: size)

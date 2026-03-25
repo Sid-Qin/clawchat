@@ -44,8 +44,7 @@ struct HomeView: View {
             )
             .ignoresSafeArea()
         }
-        .ignoresSafeArea(edges: .bottom)
-        .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var topChrome: some View {

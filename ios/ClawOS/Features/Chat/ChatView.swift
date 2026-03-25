@@ -181,10 +181,13 @@ struct ChatView: View {
         .onAppear {
             syncSelectedModel()
             syncStreamingDisplayState()
-            hapticRigid.prepare()
-            hapticSoft.prepare()
             messageDataSource.apply(renderedMessages)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                hapticRigid.prepare()
+                hapticSoft.prepare()
+            }
             Task {
+                try? await Task.sleep(for: .seconds(1.5))
                 await speechService.prepareFastStartIfAuthorized()
             }
         }

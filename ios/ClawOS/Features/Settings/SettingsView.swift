@@ -17,7 +17,7 @@ struct SettingsView: View {
         appState.selectedAgent
     }
 
-    private let bottomFadeHeight: CGFloat = 60
+    private let bottomSafeAreaSpacing: CGFloat = 12
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -29,9 +29,13 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
-            .padding(.bottom, bottomFadeHeight + 20)
+            .padding(.bottom, 20)
         }
-        .overlay(alignment: .bottom) { bottomFade }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear
+                .frame(height: bottomSafeAreaSpacing)
+                .allowsHitTesting(false)
+        }
         .background {
             LinearGradient(
                 colors: [theme.pageGradientTop, theme.pageGradientBottom],
@@ -222,18 +226,6 @@ struct SettingsView: View {
 
     private var cardBackground: some ShapeStyle {
         Color(.secondarySystemGroupedBackground)
-    }
-
-    // MARK: - Bottom Fade
-
-    private var bottomFade: some View {
-        LinearGradient(
-            colors: [.clear, theme.pageGradientBottom],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .frame(height: bottomFadeHeight)
-        .allowsHitTesting(false)
     }
 
     // MARK: - Connection Helpers
