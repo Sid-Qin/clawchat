@@ -22,22 +22,12 @@ struct AgentAvatarView: View {
                 .scaledToFill()
                 .frame(width: size, height: size)
                 .clipShape(Circle())
-        } else if showsBackground {
-            Image("clawos_svg_logo")
-                .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
-                .frame(width: size * 0.68, height: size * 0.68)
-                .foregroundStyle(theme.accent)
-                .frame(width: size, height: size)
-                .background(theme.softFill, in: Circle())
         } else {
-            Image("clawos_svg_logo")
+            Image("default_agent_avatar")
                 .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
+                .scaledToFill()
                 .frame(width: size, height: size)
-                .foregroundStyle(theme.accent)
+                .clipShape(Circle())
         }
     }
 }

@@ -54,15 +54,19 @@ struct ContentView: View {
         }
         .onChange(of: effectiveColorScheme, initial: true) { _, newScheme in
             appState.colorScheme = newScheme
+            configureTabBarAppearance()
+        }
+        .onChange(of: appState.selectedVisualThemeID) {
+            configureTabBarAppearance()
         }
     }
 
     private func configureTabBarAppearance() {
         let appearance = UITabBarAppearance()
-        appearance.configureWithTransparentBackground()
-        appearance.backgroundColor = .clear
-        appearance.backgroundEffect = nil
-        appearance.shadowColor = .clear
+        appearance.configureWithDefaultBackground()
+        appearance.backgroundEffect = UIBlurEffect(style: .systemChromeMaterial)
+        appearance.backgroundColor = UIColor(appState.currentVisualTheme.tabBarFill)
+        appearance.shadowColor = UIColor.separator.withAlphaComponent(0.15)
 
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance

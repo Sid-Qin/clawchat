@@ -424,10 +424,9 @@ enum AvatarViewHelper {
         } else {
             ZStack {
                 Color(.systemGray4)
-                Image(systemName: "person.fill")
+                Image("default_agent_avatar")
                     .resizable()
-                    .scaledToFit()
-                    .padding(20)
+                    .scaledToFill()
                     .foregroundStyle(.white)
             }
         }

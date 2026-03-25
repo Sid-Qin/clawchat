@@ -276,23 +276,19 @@ struct AgentStripView: View {
     // MARK: - Add Button
 
     private var addButton: some View {
-        Button {
-            showAddAgent = true
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 52, height: 52)
-                    .background(.ultraThinMaterial, in: Circle())
+        VStack(spacing: 4) {
+            Image(systemName: "plus")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(.quaternary)
+                .frame(width: 52, height: 52)
+                .background(.ultraThinMaterial, in: Circle())
 
-                Text("Add")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(width: 64)
+            Text("Add")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.quaternary)
         }
-        .buttonStyle(.plain)
+        .frame(width: 64)
+        .allowsHitTesting(false)
     }
 
 }
