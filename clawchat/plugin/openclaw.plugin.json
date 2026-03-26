@@ -1,0 +1,39 @@
+{
+  "id": "clawchat",
+  "name": "ClawChat",
+  "description": "First-party mobile messaging for OpenClaw. Connects to the ClawChat relay so iOS/Android apps can chat with your agent.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "relay": {
+        "type": "string",
+        "default": "wss://clawchat-production-db31.up.railway.app"
+      },
+      "token": {
+        "type": "string"
+      },
+      "session": {
+        "type": "string",
+        "default": "clawchat"
+      }
+    },
+    "required": []
+  },
+  "uiHints": {
+    "relay": {
+      "label": "Relay URL",
+      "help": "WebSocket URL of the ClawChat relay service."
+    },
+    "token": {
+      "label": "Gateway Token",
+      "help": "Token used to register this gateway with the relay. Keep secret.",
+      "sensitive": true
+    },
+    "session": {
+      "label": "Session Key",
+      "help": "OpenClaw session key for incoming messages (default: clawchat).",
+      "advanced": true
+    }
+  }
+}
