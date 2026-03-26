@@ -36,20 +36,36 @@ struct TypingBreathingDotsView: View {
     var color: Color = Color(.systemGray3)
 
     var body: some View {
-        TimelineView(.animation) { context in
-            let time = context.date.timeIntervalSinceReferenceDate * 3.2
-
-            HStack(spacing: 6) {
-                ForEach(0..<3, id: \.self) { index in
-                    let phase = (sin(time - Double(index) * 0.55) + 1) / 2
-                    Circle()
-                        .fill(color.opacity(0.28 + phase * 0.62))
-                        .frame(width: 7, height: 7)
-                        .scaleEffect(0.82 + phase * 0.24)
-                }
+        HStack(spacing: 6) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(color)
+                    .frame(width: 7, height: 7)
+                    .phaseAnimator([false, true]) { content, isExpanded in
+                        content
+                            .opacity(isExpanded ? 0.9 : 0.28)
+                            .scaleEffect(isExpanded ? 1.06 : 0.82)
+                    } animation: { _ in
+                        .easeInOut(duration: 0.6)
+                            .delay(Double(index) * 0.12)
+                            .repeatForever(autoreverses: true)
+                    }
             }
         }
         .frame(height: 12)
+    }
+}
+
+@MainActor
+enum MessageBubbleTimeFormatter {
+    static let sharedFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    static func string(from date: Date) -> String {
+        sharedFormatter.string(from: date)
     }
 }
 
@@ -150,9 +166,7 @@ struct MessageBubbleView: View {
     private var isUser: Bool { item.role == .user }
 
     private var timeString: String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter.string(from: item.timestamp)
+        MessageBubbleTimeFormatter.string(from: item.timestamp)
     }
 
     var body: some View {

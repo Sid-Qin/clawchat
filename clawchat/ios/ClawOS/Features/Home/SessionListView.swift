@@ -231,57 +231,61 @@ struct SessionRowContainer: View {
     // MARK: - Foreground Row
 
     private var foregroundRow: some View {
-        Button {
-            if offset < -10 {
-                closeSwipe(animated: true)
-            } else if !isDragging {
-                onTap()
+        SessionRowView(session: session)
+            .background(Color(.systemBackground).opacity(0.001))
+            .contentShape(Rectangle())
+            .offset(x: offset)
+            .highPriorityGesture(swipeGesture)
+            .onTapGesture {
+                handleRowTap()
             }
-        } label: {
-            SessionRowView(session: session)
-                .background(Color(.systemBackground).opacity(0.001))
-                .contentShape(Rectangle())
+    }
+
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 14)
+            .onChanged { value in
+                let dx = value.translation.width
+                let dy = value.translation.height
+
+                if !isDragging {
+                    guard abs(dx) > abs(dy) * 1.3 else { return }
+                    isDragging = true
+                    initialDragOffset = offset
+                    lastHapticStage = SessionSwipeBehavior.stage(for: offset)
+                    selectionHaptic.prepare()
+                    rigidHaptic.prepare()
+                    heavyHaptic.prepare()
+                    activeSwipeId = session.id
+                }
+
+                let nextOffset = SessionSwipeBehavior.interactiveOffset(
+                    initialOffset: initialDragOffset,
+                    translation: dx
+                )
+                offset = nextOffset
+                updateHaptics(for: nextOffset)
+            }
+            .onEnded { value in
+                isDragging = false
+                let predictedOffset = SessionSwipeBehavior.interactiveOffset(
+                    initialOffset: initialDragOffset,
+                    translation: value.predictedEndTranslation.width
+                )
+                let target = SessionSwipeBehavior.settleTarget(
+                    currentOffset: offset,
+                    predictedEndOffset: predictedOffset,
+                    velocity: value.velocity.width
+                )
+                settle(to: target)
+            }
+    }
+
+    private func handleRowTap() {
+        if offset < -10 {
+            closeSwipe(animated: true)
+        } else if !isDragging {
+            onTap()
         }
-        .buttonStyle(.plain)
-        .offset(x: offset)
-        .gesture(
-            DragGesture(minimumDistance: 14)
-                .onChanged { value in
-                    let dx = value.translation.width
-                    let dy = value.translation.height
-
-                    if !isDragging {
-                        guard abs(dx) > abs(dy) * 1.3 else { return }
-                        isDragging = true
-                        initialDragOffset = offset
-                        lastHapticStage = SessionSwipeBehavior.stage(for: offset)
-                        selectionHaptic.prepare()
-                        rigidHaptic.prepare()
-                        heavyHaptic.prepare()
-                        activeSwipeId = session.id
-                    }
-
-                    let nextOffset = SessionSwipeBehavior.interactiveOffset(
-                        initialOffset: initialDragOffset,
-                        translation: dx
-                    )
-                    offset = nextOffset
-                    updateHaptics(for: nextOffset)
-                }
-                .onEnded { value in
-                    isDragging = false
-                    let predictedOffset = SessionSwipeBehavior.interactiveOffset(
-                        initialOffset: initialDragOffset,
-                        translation: value.predictedEndTranslation.width
-                    )
-                    let target = SessionSwipeBehavior.settleTarget(
-                        currentOffset: offset,
-                        predictedEndOffset: predictedOffset,
-                        velocity: value.velocity.width
-                    )
-                    settle(to: target)
-                }
-        )
     }
 
     private func togglePin() {

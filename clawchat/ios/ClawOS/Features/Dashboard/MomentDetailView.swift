@@ -5,16 +5,13 @@ struct MomentDetailOverlay: View {
     let moment: MockMoment
 
     @State private var dragOffset: CGSize = .zero
+    @State private var dismissAxis: MomentDismissAxis?
     @State private var isDragging = false
     @State private var isPresented = false
     @State private var selectedImageIndex = 0
 
-    private var dragMagnitude: CGFloat {
-        hypot(dragOffset.width, dragOffset.height)
-    }
-
     private var dismissProgress: CGFloat {
-        min(1, dragMagnitude / 320)
+        MomentDismissGestureBehavior.dismissProgress(for: dragOffset, axis: dismissAxis)
     }
 
     var body: some View {
@@ -32,46 +29,103 @@ struct MomentDetailOverlay: View {
                 .scaleEffect(isDragging ? max(0.8, 1.0 - dismissProgress * 0.2) : 1.0)
                 .offset(x: dragOffset.width, y: dragOffset.height)
                 .offset(x: isPresented ? 0 : UIScreen.main.bounds.width)
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            if !isDragging {
-                                let isEdgeSwipe = value.startLocation.x < 40 && value.translation.width > 0
-                                let isDownwardSwipe = value.translation.height > abs(value.translation.width)
-                                let isRightSwipeOnFirstImage = selectedImageIndex == 0 && value.translation.width > 0 && abs(value.translation.width) > abs(value.translation.height)
-
-                                if isEdgeSwipe || isDownwardSwipe || isRightSwipeOnFirstImage {
-                                    isDragging = true
-                                }
-                            }
-
-                            if isDragging {
-                                dragOffset = value.translation
-                            }
-                        }
-                        .onEnded { value in
-                            guard isDragging else { return }
-
-                            let vx = value.velocity.width
-                            let vy = value.velocity.height
-                            let tx = value.translation.width
-                            let ty = value.translation.height
-
-                            if abs(tx) > 120 || abs(ty) > 150 || abs(vx) > 500 || abs(vy) > 500 {
-                                dismiss(velocityX: vx, velocityY: vy)
-                            } else {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
-                                    dragOffset = .zero
-                                    isDragging = false
-                                }
-                            }
-                        }
-                )
+                .simultaneousGesture(contentDismissGesture)
+                .overlay(alignment: .leading) {
+                    Color.clear
+                        .frame(width: MomentDismissGestureBehavior.edgeActivationWidth)
+                        .frame(maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .highPriorityGesture(edgeDismissGesture)
+                }
         }
         .onAppear {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
                 isPresented = true
             }
+        }
+    }
+
+    private var contentDismissGesture: some Gesture {
+        dismissGesture(
+            allowsContentHorizontalDismiss: selectedImageIndex == 0,
+            requiresEdgeStart: false
+        )
+    }
+
+    private var edgeDismissGesture: some Gesture {
+        dismissGesture(
+            allowsContentHorizontalDismiss: true,
+            requiresEdgeStart: true
+        )
+    }
+
+    private func dismissGesture(
+        allowsContentHorizontalDismiss: Bool,
+        requiresEdgeStart: Bool
+    ) -> some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .global)
+            .onChanged { value in
+                if dismissAxis == nil {
+                    dismissAxis = MomentDismissGestureBehavior.beginAxis(
+                        startLocation: value.startLocation,
+                        translation: value.translation,
+                        allowsContentHorizontalDismiss: allowsContentHorizontalDismiss,
+                        requiresEdgeStart: requiresEdgeStart
+                    )
+
+                    if dismissAxis != nil {
+                        isDragging = true
+                    }
+                }
+
+                guard let dismissAxis else { return }
+                dragOffset = MomentDismissGestureBehavior.resolvedOffset(
+                    for: value.translation,
+                    axis: dismissAxis
+                )
+            }
+            .onEnded { value in
+                guard let dismissAxis else {
+                    resetDragState(animated: false)
+                    return
+                }
+
+                let resolvedTranslation = MomentDismissGestureBehavior.resolvedOffset(
+                    for: value.translation,
+                    axis: dismissAxis
+                )
+                let resolvedVelocity = MomentDismissGestureBehavior.resolvedOffset(
+                    for: value.velocity,
+                    axis: dismissAxis
+                )
+
+                dragOffset = resolvedTranslation
+
+                if MomentDismissGestureBehavior.shouldDismiss(
+                    translation: resolvedTranslation,
+                    velocity: resolvedVelocity,
+                    axis: dismissAxis
+                ) {
+                    dismiss(velocityX: resolvedVelocity.width, velocityY: resolvedVelocity.height)
+                } else {
+                    resetDragState(animated: true)
+                }
+            }
+    }
+
+    private func resetDragState(animated: Bool) {
+        let updates = {
+            dragOffset = .zero
+            isDragging = false
+            dismissAxis = nil
+        }
+
+        if animated {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                updates()
+            }
+        } else {
+            updates()
         }
     }
 
@@ -82,14 +136,15 @@ struct MomentDetailOverlay: View {
         withAnimation(.easeOut(duration: 0.26)) {
             if abs(velocityX) > abs(velocityY) || abs(dragOffset.width) > abs(dragOffset.height) {
                 dragOffset.width = velocityX >= 0 && dragOffset.width >= 0 ? sw : -sw
-                dragOffset.height += velocityY * 0.06
+                dragOffset.height += velocityY * MomentDismissGestureBehavior.crossAxisDamping
             } else {
                 dragOffset.height = velocityY >= 0 && dragOffset.height >= 0 ? sh : -sh
-                dragOffset.width += velocityX * 0.06
+                dragOffset.width += velocityX * MomentDismissGestureBehavior.crossAxisDamping
             }
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            dismissAxis = nil
             appState.selectedMoment = nil
         }
     }
@@ -409,11 +464,12 @@ struct MomentDetailView: View {
     private var cardDragGesture: some Gesture {
         DragGesture(coordinateSpace: .global)
             .onChanged { value in
-                let translation = -value.translation.height // Dragging up = positive translation
-                // completely responsive, no animation delay during drag
+                guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                let translation = -value.translation.height
                 cardPullUp = max(minCardPull, min(maxCardPull, lastCardPullUp + translation))
             }
             .onEnded { value in
+                guard abs(value.translation.height) > abs(value.translation.width) else { return }
                 let velocity = -value.velocity.height
                 let translation = -value.translation.height
                 let projectedPosition = lastCardPullUp + translation + velocity * 0.2

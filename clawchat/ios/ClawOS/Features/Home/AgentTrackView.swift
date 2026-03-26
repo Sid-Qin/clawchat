@@ -264,7 +264,7 @@ struct AgentTrackView: View {
     
     private var addButton: some View {
         Button {
-            showAddAgent = true
+            // showAddAgent = true
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 18, weight: .semibold))
@@ -274,5 +274,7 @@ struct AgentTrackView: View {
                 .adaptiveGlass(in: .circle)
         }
         .buttonStyle(.plain)
+        .disabled(true)
+        .opacity(0.4)
     }
 }

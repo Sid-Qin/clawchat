@@ -97,7 +97,7 @@ struct ClawOSTests {
 
         appState.applyConnectionInfo(
             gatewayId: "gw-1",
-            relayUrl: "wss://relay.example.com",
+            endpointUrl: "wss://relay.example.com",
             agentIds: ["hulu::呼噜::claude-opus-4-6::claude-opus-4-6||gpt-5.3-codex"]
         )
 
@@ -133,6 +133,60 @@ struct ClawOSTests {
         appState.appendMessage(to: "s1", message: message)
 
         #expect(appState.sessions.first?.lastMessage == "附件：eva.png")
+    }
+
+    @Test("Gateway 运行时模型会同步到现有 agent")
+    func updateAgentRuntimeModelUpdatesExistingAgent() {
+        let appState = AppState()
+        appState.agents = [
+            Agent(
+                id: "main",
+                name: "主代理",
+                avatar: "",
+                status: .online,
+                unreadCount: 0,
+                gatewayId: "gw-1",
+                model: nil,
+                availableModels: nil
+            )
+        ]
+
+        appState.updateAgentRuntimeModel(
+            id: "main",
+            modelDisplayValue: "anthropic/claude-opus-4-1"
+        )
+
+        #expect(appState.agents.first?.model == "anthropic/claude-opus-4-1")
+        #expect(appState.agents.first?.availableModels == ["anthropic/claude-opus-4-1"])
+    }
+
+    @Test("addTokenUsage 累加并持久化 agent token 消耗")
+    func addTokenUsageAccumulatesTokens() {
+        let appState = AppState()
+        appState.agents = [
+            Agent(
+                id: "main",
+                name: "主代理",
+                avatar: "",
+                status: .online,
+                unreadCount: 0,
+                gatewayId: "gw-1",
+                model: nil,
+                availableModels: nil
+            )
+        ]
+
+        appState.addTokenUsage(agentId: "main", tokens: 1500)
+        #expect(appState.agents.first?.totalTokens == 1500)
+
+        appState.addTokenUsage(agentId: "main", tokens: 800)
+        #expect(appState.agents.first?.totalTokens == 2300)
+
+        appState.addTokenUsage(agentId: "main", tokens: 0)
+        #expect(appState.agents.first?.totalTokens == 2300)
+
+        appState.addTokenUsage(agentId: "nonexistent", tokens: 100)
+        #expect(appState.agents.first?.totalTokens == 2300)
     }
 
     @Test("startNewSession 为同一 agent 生成独立 sessionKey")
@@ -246,44 +300,6 @@ struct ClawOSTests {
         #expect(glowFrame.maxY > keyboard.minY)
         #expect(glowFrame.minX > screen.minX)
         #expect(glowFrame.maxX < screen.maxX)
-    }
-
-    @Test("打字机效果每个节拍只前进固定字符数")
-    func typewriterAdvanceUsesFixedStep() {
-        let next = StreamingTypewriter.nextDisplayText(
-            current: "",
-            target: "你好世界",
-            charactersPerTick: 2
-        )
-
-        #expect(next == "你好")
-    }
-
-    @Test("打字机效果不会超过真实已返回内容")
-    func typewriterAdvanceNeverExceedsTarget() {
-        let next = StreamingTypewriter.nextDisplayText(
-            current: "你好世",
-            target: "你好世界",
-            charactersPerTick: 8
-        )
-
-        #expect(next == "你好世界")
-    }
-
-    @Test("打字机效果遇到最终文本回退时会以真实文本为准")
-    func typewriterAdvanceSnapsToAuthoritativeTargetWhenCurrentIsNotPrefix() {
-        let next = StreamingTypewriter.nextDisplayText(
-            current: "hello world world",
-            target: "hello world",
-            charactersPerTick: 2
-        )
-
-        #expect(next == "hello world")
-    }
-
-    @Test("流式滚动跟随会节流避免每个字都触发滚动")
-    func typewriterScrollFollowCadenceIsThrottledForStreaming() {
-        #expect(StreamingTypewriter.followScrollDelayMilliseconds >= StreamingTypewriter.tickIntervalMilliseconds)
     }
 
     @Test("agent 轨道入口和新增按钮尺寸与头像保持一致")
@@ -422,6 +438,56 @@ struct ClawOSTests {
         let anchorId = SessionPreviewScrollAnchorResolver.initialAnchorMessageID(in: [])
 
         #expect(anchorId == nil)
+    }
+
+    @Test("Aha 故事左边缘右滑即使带少量纵向抖动也应触发退出手势")
+    func momentDismissBeginsFromEdgeWithVerticalNoise() {
+        let axis = MomentDismissGestureBehavior.beginAxis(
+            startLocation: CGPoint(x: 24, y: 280),
+            translation: CGSize(width: 18, height: 10),
+            allowsContentHorizontalDismiss: false
+        )
+
+        #expect(axis == .horizontal)
+    }
+
+    @Test("Aha 故事第一页在内容区强右滑可触发退出，非第一页不误伤图片翻页")
+    func momentDismissContentSwipeDependsOnImageIndex() {
+        let firstImageAxis = MomentDismissGestureBehavior.beginAxis(
+            startLocation: CGPoint(x: 180, y: 320),
+            translation: CGSize(width: 42, height: 12),
+            allowsContentHorizontalDismiss: true
+        )
+        let laterImageAxis = MomentDismissGestureBehavior.beginAxis(
+            startLocation: CGPoint(x: 180, y: 320),
+            translation: CGSize(width: 42, height: 12),
+            allowsContentHorizontalDismiss: false
+        )
+
+        #expect(firstImageAxis == .horizontal)
+        #expect(laterImageAxis == nil)
+    }
+
+    @Test("Aha 故事水平退出时会锁定主方向并抑制纵向抖动")
+    func momentDismissLocksHorizontalOffset() {
+        let offset = MomentDismissGestureBehavior.resolvedOffset(
+            for: CGSize(width: 120, height: 45),
+            axis: .horizontal
+        )
+
+        #expect(offset.width == 120)
+        #expect(offset.height < 12)
+    }
+
+    @Test("Aha 故事明显右滑时应更早判定为可退出")
+    func momentDismissUsesResponsiveHorizontalThreshold() {
+        let shouldDismiss = MomentDismissGestureBehavior.shouldDismiss(
+            translation: CGSize(width: 96, height: 18),
+            velocity: CGSize(width: 260, height: 40),
+            axis: .horizontal
+        )
+
+        #expect(shouldDismiss)
     }
 
 }

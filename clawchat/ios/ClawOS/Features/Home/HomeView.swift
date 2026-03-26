@@ -136,7 +136,7 @@ struct HomeView: View {
                 Button {
                     appState.showPairing = true
                 } label: {
-                    Label("配对服务器", systemImage: "antenna.radiowaves.left.and.right")
+                    Label("连接 Gateway", systemImage: "antenna.radiowaves.left.and.right")
                 }
             } else {
                 ForEach(appState.gateways) { gw in
@@ -166,7 +166,7 @@ struct HomeView: View {
                 Button {
                     appState.showPairing = true
                 } label: {
-                    Label("添加服务器", systemImage: "plus")
+                    Label("添加 Gateway", systemImage: "plus")
                 }
             }
         } label: {

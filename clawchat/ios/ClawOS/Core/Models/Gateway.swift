@@ -1,4 +1,5 @@
 import Foundation
+import ClawChatKit
 
 enum GatewayType: String, Codable, CaseIterable {
     case local
@@ -19,4 +20,5 @@ struct Gateway: Identifiable, Codable, Hashable {
     var type: GatewayType
     var status: ConnectionStatus
     var ping: Int?
+    var connectionMethod: ConnectionMethod?
 }

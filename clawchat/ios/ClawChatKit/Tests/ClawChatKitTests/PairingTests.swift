@@ -11,11 +11,13 @@ struct PairingTests {
     func pairingErrorEquality() {
         #expect(PairingError.invalidCode == PairingError.invalidCode)
         #expect(PairingError.codeExpired == PairingError.codeExpired)
-        #expect(PairingError.unauthorized == PairingError.unauthorized)
+        #expect(PairingError.invalidToken == PairingError.invalidToken)
+        #expect(PairingError.invalidDeviceToken == PairingError.invalidDeviceToken)
         #expect(PairingError.timeout == PairingError.timeout)
         #expect(PairingError.networkError("a") == PairingError.networkError("a"))
         #expect(PairingError.networkError("a") != PairingError.networkError("b"))
         #expect(PairingError.invalidCode != PairingError.codeExpired)
+        #expect(PairingError.invalidToken != PairingError.invalidDeviceToken)
     }
 
     // MARK: - AppPair message
@@ -82,20 +84,37 @@ struct PairingTests {
 
     // MARK: - CredentialStore
 
-    @Test("CredentialStore save and load cycle")
-    func credentialStoreSaveLoad() throws {
+    @Test("CredentialStore save and load relay profile")
+    func credentialStoreSaveLoadRelay() throws {
         let keychain = KeychainStore(service: "com.clawchat.test.\(UUID().uuidString)")
         let store = CredentialStore(keychain: keychain)
 
-        try store.save(deviceToken: "tok-abc", relayUrl: "wss://relay.example.com", gatewayId: "gw-1")
+        try store.saveRelay(deviceToken: "tok-abc", relayUrl: "wss://relay.example.com", gatewayId: "gw-1")
 
-        let creds = try store.load()
-        #expect(creds != nil)
-        #expect(creds?.deviceToken == "tok-abc")
-        #expect(creds?.relayUrl == "wss://relay.example.com")
-        #expect(creds?.gatewayId == "gw-1")
+        let profile = try store.load()
+        #expect(profile != nil)
+        #expect(profile?.method == .relay)
+        #expect(profile?.deviceToken == "tok-abc")
+        #expect(profile?.endpointUrl == "wss://relay.example.com")
+        #expect(profile?.gatewayId == "gw-1")
 
-        // Cleanup
+        try store.clear()
+    }
+
+    @Test("CredentialStore save and load direct profile")
+    func credentialStoreSaveLoadDirect() throws {
+        let keychain = KeychainStore(service: "com.clawchat.test.\(UUID().uuidString)")
+        let store = CredentialStore(keychain: keychain)
+
+        try store.saveDirect(deviceToken: "dt-xyz", gatewayUrl: "wss://gw.example.com", gatewayId: "gw-2")
+
+        let profile = try store.load()
+        #expect(profile != nil)
+        #expect(profile?.method == .direct)
+        #expect(profile?.deviceToken == "dt-xyz")
+        #expect(profile?.endpointUrl == "wss://gw.example.com")
+        #expect(profile?.gatewayId == "gw-2")
+
         try store.clear()
     }
 
@@ -104,8 +123,8 @@ struct PairingTests {
         let keychain = KeychainStore(service: "com.clawchat.test.\(UUID().uuidString)")
         let store = CredentialStore(keychain: keychain)
 
-        let creds = try store.load()
-        #expect(creds == nil)
+        let profile = try store.load()
+        #expect(profile == nil)
     }
 
     @Test("CredentialStore clear removes all credentials")
@@ -113,11 +132,11 @@ struct PairingTests {
         let keychain = KeychainStore(service: "com.clawchat.test.\(UUID().uuidString)")
         let store = CredentialStore(keychain: keychain)
 
-        try store.save(deviceToken: "tok-abc", relayUrl: "wss://relay.example.com", gatewayId: "gw-1")
+        try store.saveRelay(deviceToken: "tok-abc", relayUrl: "wss://relay.example.com", gatewayId: "gw-1")
         try store.clear()
 
-        let creds = try store.load()
-        #expect(creds == nil)
+        let profile = try store.load()
+        #expect(profile == nil)
     }
 
     // MARK: - KeychainStore

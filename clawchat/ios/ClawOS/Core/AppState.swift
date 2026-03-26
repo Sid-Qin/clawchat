@@ -14,7 +14,9 @@ final class AppState {
     private static let messagesKey = "clawos_messages"
     private static let themeKey = "clawos_theme"
     private static let agentAvatarsKey = "clawos_agent_avatars"
+    private static let agentTokensKey = "clawos_agent_tokens"
     private static let stripPrefix = "clawos_strip_"
+    private static let messagePersistenceDebounceMilliseconds = 350
 
     var agents: [Agent] = []
     var gateways: [Gateway] = []
@@ -30,6 +32,7 @@ final class AppState {
         qos: .utility
     )
     private var latestMessagesPersistenceRevision = 0
+    private var pendingMessagePersistenceWorkItem: DispatchWorkItem?
 
     var selectedAgentId: String = ""
     var selectedGatewayId: String = ""
@@ -246,24 +249,32 @@ final class AppState {
 
     func applyConnectionInfo(
         gatewayId: String,
-        relayUrl: String,
+        endpointUrl: String,
         agentIds: [String],
-        agentsMeta: [String: AgentMeta]? = nil
+        agentsMeta: [String: AgentMeta]? = nil,
+        connectionMethod: ConnectionMethod = .relay
     ) {
+        let displayName = endpointUrl
+            .replacingOccurrences(of: "wss://", with: "")
+            .replacingOccurrences(of: "ws://", with: "")
+
+        let gwType: GatewayType = connectionMethod == .direct ? .custom : .cloud
+        let savedTokens = loadTokenUsage()
+
         let gateway = Gateway(
             id: gatewayId,
-            name: relayUrl
-                .replacingOccurrences(of: "wss://", with: "")
-                .replacingOccurrences(of: "ws://", with: ""),
-            url: relayUrl,
-            type: .cloud,
-            status: .online
+            name: displayName,
+            url: endpointUrl,
+            type: gwType,
+            status: .online,
+            connectionMethod: connectionMethod
         )
 
         if !gateways.contains(where: { $0.id == gatewayId }) {
             gateways.append(gateway)
         } else if let idx = gateways.firstIndex(where: { $0.id == gatewayId }) {
             gateways[idx].status = .online
+            gateways[idx].connectionMethod = connectionMethod
         }
 
         selectedGatewayId = gatewayId
@@ -294,14 +305,17 @@ final class AppState {
         for parsed in parsedAgents {
             let agentId = parsed.id
             let agentName = parsed.name
-            let agentModel = parsed.model ?? "unknown"
-            let availableModels = parsed.availableModels ?? [agentModel]
 
             if let idx = agents.firstIndex(where: { $0.id == agentId }) {
+                let resolvedModel = parsed.model ?? agents[idx].model
+                let resolvedModels = parsed.availableModels ?? resolvedModel.map { [$0] } ?? agents[idx].availableModels
                 agents[idx].name = agentName
-                agents[idx].model = agentModel
-                agents[idx].availableModels = availableModels
+                agents[idx].model = resolvedModel
+                agents[idx].availableModels = resolvedModels
                 agents[idx].status = .online
+                if agents[idx].totalTokens == nil {
+                    agents[idx].totalTokens = savedTokens[agentId]
+                }
             } else {
                 let savedAvatar = loadAgentAvatars()[agentId] ?? ""
                 let agent = Agent(
@@ -311,8 +325,9 @@ final class AppState {
                     status: .online,
                     unreadCount: 0,
                     gatewayId: gatewayId,
-                    model: agentModel,
-                    availableModels: availableModels
+                    model: parsed.model,
+                    availableModels: parsed.availableModels,
+                    totalTokens: savedTokens[agentId]
                 )
                 agents.append(agent)
             }
@@ -365,7 +380,7 @@ final class AppState {
         sessions.removeAll { $0.id == id }
         messagesBySession.removeValue(forKey: id)
         chatScrollAnchorsBySession.removeValue(forKey: id)
-        persistMessages()
+        schedulePersistMessages()
     }
 
     func togglePinSession(id: String) {
@@ -378,6 +393,27 @@ final class AppState {
         guard let idx = agents.firstIndex(where: { $0.id == id }) else { return }
         agents[idx].avatar = avatar
         persistAgentAvatars()
+    }
+
+    func updateAgentRuntimeModel(id: String, modelDisplayValue: String) {
+        let trimmed = modelDisplayValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let idx = agents.firstIndex(where: { $0.id == id }) else { return }
+
+        agents[idx].model = trimmed
+
+        var models = agents[idx].availableModels ?? []
+        if !models.contains(trimmed) {
+            models.insert(trimmed, at: 0)
+        }
+        agents[idx].availableModels = models
+    }
+
+    func addTokenUsage(agentId: String, tokens: Int) {
+        guard tokens > 0,
+              let idx = agents.firstIndex(where: { $0.id == agentId }) else { return }
+        agents[idx].totalTokens = (agents[idx].totalTokens ?? 0) + tokens
+        persistTokenUsage()
     }
 
     func deleteAgent(id: String) {
@@ -433,7 +469,7 @@ final class AppState {
 
     func appendMessage(to sessionId: String, message: StoredMessage) {
         messagesBySession[sessionId, default: []].append(message)
-        persistMessages()
+        schedulePersistMessages()
 
         if let idx = sessions.firstIndex(where: { $0.id == sessionId }) {
             sessions[idx].lastMessage = message.previewText
@@ -446,7 +482,7 @@ final class AppState {
               let idx = msgs.firstIndex(where: { $0.id == messageId }) else { return }
         msgs[idx].text = text
         messagesBySession[sessionId] = msgs
-        persistMessages()
+        schedulePersistMessages()
 
         if sessions.first(where: { $0.id == sessionId }) != nil,
            idx == msgs.count - 1 {
@@ -486,7 +522,29 @@ final class AppState {
 
     // MARK: - Message Persistence
 
-    private func persistMessages() {
+    func flushPendingMessagePersistence() {
+        pendingMessagePersistenceWorkItem?.cancel()
+        pendingMessagePersistenceWorkItem = nil
+        persistMessagesNow()
+    }
+
+    private func schedulePersistMessages() {
+        pendingMessagePersistenceWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingMessagePersistenceWorkItem = nil
+            self.persistMessagesNow()
+        }
+        pendingMessagePersistenceWorkItem = workItem
+
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + .milliseconds(Self.messagePersistenceDebounceMilliseconds),
+            execute: workItem
+        )
+    }
+
+    private func persistMessagesNow() {
         let snapshot = messagesBySession
         latestMessagesPersistenceRevision += 1
         let revision = latestMessagesPersistenceRevision
@@ -520,6 +578,24 @@ final class AppState {
     private func loadAgentAvatars() -> [String: String] {
         guard let data = UserDefaults.standard.data(forKey: Self.agentAvatarsKey),
               let map = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
+        return map
+    }
+
+    // MARK: - Token Usage Persistence
+
+    private func persistTokenUsage() {
+        let map = Dictionary(uniqueKeysWithValues: agents.compactMap { agent -> (String, Int)? in
+            guard let tokens = agent.totalTokens, tokens > 0 else { return nil }
+            return (agent.id, tokens)
+        })
+        if let data = try? JSONEncoder().encode(map) {
+            UserDefaults.standard.set(data, forKey: Self.agentTokensKey)
+        }
+    }
+
+    private func loadTokenUsage() -> [String: Int] {
+        guard let data = UserDefaults.standard.data(forKey: Self.agentTokensKey),
+              let map = try? JSONDecoder().decode([String: Int].self, from: data) else { return [:] }
         return map
     }
 

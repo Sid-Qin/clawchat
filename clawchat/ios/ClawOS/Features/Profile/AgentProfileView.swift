@@ -6,13 +6,9 @@ struct AgentProfileView: View {
     @State private var showAvatarPicker = false
     @State private var avatarRefreshToken = UUID()
     @State private var isAdvancedExpanded = false
-    @State private var showAgentSwitcher = false
-    @State private var agentNameButtonHeight: CGFloat = 0
     @State private var showDeleteConfirmation = false
 
     var agentId: String?
-
-    private let maxVisibleAgentSwitcherRows = 5
 
     private var currentAgent: Agent? {
         if let agentId {
@@ -55,6 +51,7 @@ struct AgentProfileView: View {
             .ignoresSafeArea()
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .scrollIndicators(.hidden)
         .onAppear {
             if let agentId, appState.selectedAgentId != agentId {
@@ -118,32 +115,12 @@ struct AgentProfileView: View {
     // MARK: - Profile Content
 
     private var profileContent: some View {
-        ZStack(alignment: .topLeading) {
-            VStack(alignment: .leading, spacing: 0) {
-                headerRow
-                infoCards
-            }
-
-            if showAgentSwitcher {
-                Color.black.opacity(0.001)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .onTapGesture {
-                        showAgentSwitcher = false
-                    }
-
-                agentSwitcherCard(selectedAgentId: currentAgent?.id ?? "")
-                    .padding(.top, headerSwitcherTopOffset)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            headerRow
+            infoCards
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
         .padding(.bottom, 100)
-    }
-
-    private var headerSwitcherTopOffset: CGFloat {
-        let bannerOverlap: CGFloat = -28
-        let bottomPadding: CGFloat = -12
-        let avatarArea = AppTheme.largeAvatarSize + bannerOverlap + bottomPadding
-        return avatarArea + agentNameButtonHeight + 8
     }
 
     private var headerRow: some View {
@@ -195,35 +172,14 @@ struct AgentProfileView: View {
             .padding(.bottom, -12)
 
             if let agent = currentAgent {
-                Button {
-                    showAgentSwitcher.toggle()
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(agent.name)
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.primary)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .layoutPriority(1)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize()
-                    }
-                    .contentTransition(.identity)
-                }
-                .buttonStyle(.plain)
-                .transaction { $0.animation = nil }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear
-                            .onAppear { agentNameButtonHeight = proxy.size.height }
-                            .onChange(of: proxy.size.height) { _, h in agentNameButtonHeight = h }
-                    }
-                }
-                .padding(.bottom, 20)
+                Text(agent.name)
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 20)
             }
         }
         .sheet(isPresented: $showAvatarPicker) {
@@ -336,53 +292,6 @@ struct AgentProfileView: View {
             .padding(.vertical, 5)
             .background(currentTheme.accent.opacity(0.12))
             .clipShape(Capsule())
-    }
-
-    private func agentSwitcherCard(selectedAgentId: String) -> some View {
-        ScrollView(showsIndicators: appState.agents.count > maxVisibleAgentSwitcherRows) {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(appState.agents) { agent in
-                    Button {
-                        showAgentSwitcher = false
-                        appState.selectedAgentId = agent.id
-                    } label: {
-                        HStack(alignment: .top, spacing: 10) {
-                            Group {
-                                if agent.id == selectedAgentId {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(currentTheme.accent)
-                                } else {
-                                    Color.clear
-                                }
-                            }
-                            .frame(width: 14, height: 14)
-                            .padding(.top, 2)
-
-                            Text(agent.name)
-                                .font(.system(size: 15, weight: agent.id == selectedAgentId ? .semibold : .medium))
-                                .foregroundStyle(.primary)
-                                .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(agent.id == selectedAgentId ? currentTheme.accent.opacity(0.08) : .clear)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .frame(maxHeight: CGFloat(maxVisibleAgentSwitcherRows) * 52)
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .adaptiveGlass(in: .rect(cornerRadius: AppTheme.Radius.lg))
-        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 6)
     }
 
     private var advancedSection: some View {
@@ -603,6 +512,41 @@ struct AvatarPickerSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // 自定义顶部栏
+                HStack {
+                    Spacer()
+                        .frame(width: 80) // 占位保持标题居中
+
+                    Spacer()
+
+                    Text("选择头像")
+                        .font(.headline)
+
+                    Spacer()
+
+                    Text("完成")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(minWidth: 64)
+                        .frame(height: 34)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(hasPendingChange ? accent : Color(.systemGray4))
+                        )
+                        .contentShape(Capsule(style: .continuous))
+                        .opacity(hasPendingChange ? 1 : 0.7)
+                        .onTapGesture {
+                            guard hasPendingChange else { return }
+                            commitAndDismiss()
+                        }
+                        .allowsHitTesting(hasPendingChange)
+                        .accessibilityAddTraits(.isButton)
+                        .frame(width: 80, alignment: .trailing) // 与左侧占位对称
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+
                 ScrollView {
                     VStack(spacing: 20) {
                         currentPreview
@@ -624,25 +568,6 @@ struct AvatarPickerSheet: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 12)
                     .padding(.bottom, 16)
-            }
-            .navigationTitle("选择头像")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        commitAndDismiss()
-                    } label: {
-                        Text("完成")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 7)
-                            .background(hasPendingChange ? accent : Color(.systemGray4), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!hasPendingChange)
-                    .animation(.easeInOut(duration: 0.2), value: hasPendingChange)
-                }
             }
         }
         .presentationDetents([.medium, .large])

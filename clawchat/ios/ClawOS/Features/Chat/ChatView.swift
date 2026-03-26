@@ -6,6 +6,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 import Speech
 
+@MainActor
 struct ChatView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -26,13 +27,10 @@ struct ChatView: View {
     @State private var speechPermissionMessage = ""
     @State private var isVoiceFinalizing = false
     @State private var voiceFinalizeTask: Task<Void, Never>?
-    @State private var streamingDisplayMessageId: String?
-    @State private var streamingDisplayText = ""
-    @State private var streamingTargetText = ""
-    @State private var streamingDisplayTask: Task<Void, Never>?
     @State private var isWalkieTalkieRecording = false
     @FocusState private var isInputFocused: Bool
     @State private var messageDataSource = ListDataSource<MessageBubbleItem>()
+    @State private var renderedMessages: [MessageBubbleItem] = []
     @State private var tiledScrollPosition = TiledScrollPosition(
         autoScrollsToBottomOnAppend: true,
         scrollsToBottomOnReplace: true
@@ -57,6 +55,12 @@ struct ChatView: View {
         case starting
         case recording
         case finalizing
+    }
+
+    private struct RenderSyncSignature: Equatable {
+        let storedCount: Int
+        let lastStoredItem: MessageBubbleItem?
+        let livePreviewItem: MessageBubbleItem?
     }
 
     private var agent: Agent? {
@@ -101,24 +105,16 @@ struct ChatView: View {
         chatManager.isTyping(for: session.agentId, sessionKey: session.sessionKey)
     }
 
-    private var previewAssistantMessage: ChatMessage? {
-        let storedIds = Set(storedMessages.map(\.id))
-        return sessionLiveMessages.last(where: {
-            $0.role == .assistant
-            && !storedIds.contains($0.id)
-        })
-    }
-
-    private var hasTransientAssistantPreview: Bool {
-        previewAssistantMessage != nil || streamingDisplayMessageId != nil
-    }
-
-    private var renderedMessages: [MessageBubbleItem] {
-        var items = storedMessages.map(MessageBubbleItem.init(storedMessage:))
-        if let previewAssistantMessage {
-            items.append(MessageBubbleItem(chatMessage: previewAssistantMessage))
-        }
-        return items.map(bufferedMessageItem)
+    private var renderSyncSignature: RenderSyncSignature {
+        let livePreview = ChatRenderPipeline.previewAssistantMessage(
+            storedMessages: storedMessages,
+            liveMessages: sessionLiveMessages
+        )
+        return RenderSyncSignature(
+            storedCount: storedMessages.count,
+            lastStoredItem: storedMessages.last.map(MessageBubbleItem.init(storedMessage:)),
+            livePreviewItem: livePreview.map(MessageBubbleItem.init(chatMessage:))
+        )
     }
 
     private var isEmpty: Bool {
@@ -137,6 +133,8 @@ struct ChatView: View {
             VStack(spacing: 0) {
                 connectionBanner
                 messageArea
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 inputBar
             }
 
@@ -180,8 +178,7 @@ struct ChatView: View {
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             syncSelectedModel()
-            syncStreamingDisplayState()
-            messageDataSource.apply(renderedMessages)
+            refreshMessageSnapshot()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 hapticRigid.prepare()
                 hapticSoft.prepare()
@@ -194,21 +191,8 @@ struct ChatView: View {
         .onChange(of: agent?.id) { _, _ in
             syncSelectedModel()
         }
-        .onChange(of: previewAssistantMessage?.id) { _, _ in
-            syncStreamingDisplayState()
-        }
-        .onChange(of: previewAssistantMessage?.text) { _, _ in
-            syncStreamingDisplayState()
-        }
-        .onChange(of: previewAssistantMessage?.isStreaming) { _, _ in
-            syncStreamingDisplayState()
-        }
-        .onChange(of: storedMessages.count) { _, _ in
-            syncStreamingDisplayState()
-        }
-        .onDisappear {
-            streamingDisplayTask?.cancel()
-            streamingDisplayTask = nil
+        .onChange(of: renderSyncSignature) { _, _ in
+            refreshMessageSnapshot()
         }
         .photosPicker(
             isPresented: $showPhotoPicker,
@@ -328,13 +312,6 @@ struct ChatView: View {
             tiledScrollPosition.autoScrollsToBottomOnAppend = nearBottom
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onChange(of: renderedMessages) { _, newMessages in
-            messageDataSource.apply(newMessages)
-        }
-        .onChange(of: streamingDisplayText) { _, _ in
-            guard isNearBottom, streamingDisplayMessageId != nil else { return }
-            tiledScrollPosition.scrollTo(edge: .bottom, animated: false)
-        }
         .onChange(of: sessionLiveMessages.count) { _, _ in
             syncLiveMessages()
         }
@@ -345,99 +322,31 @@ struct ChatView: View {
         }
     }
 
-    private func bufferedMessageItem(_ item: MessageBubbleItem) -> MessageBubbleItem {
-        guard item.role == .assistant,
-              item.id == streamingDisplayMessageId else {
-            return item
-        }
-
-        let shouldKeepTyping = streamingDisplayText != item.text
-        return MessageBubbleItem(
-            id: item.id,
-            role: item.role,
-            text: streamingDisplayText,
-            reasoning: item.reasoning,
-            attachments: item.attachments,
-            toolEvents: item.toolEvents,
-            isStreaming: item.isStreaming || shouldKeepTyping,
-            isError: item.isError,
-            timestamp: item.timestamp
+    private func refreshMessageSnapshot(forceScrollToBottom: Bool = false, animated: Bool = false) {
+        let newMessages = ChatRenderPipeline.renderedMessages(
+            storedMessages: storedMessages,
+            liveMessages: sessionLiveMessages
         )
-    }
+        let previousLastMessage = renderedMessages.last
+        let nextLastMessage = newMessages.last
+        let didTailMessageChange = previousLastMessage?.id == nextLastMessage?.id
+            && previousLastMessage != nextLastMessage
+        let didSnapshotChange = newMessages != renderedMessages
 
-    private func syncStreamingDisplayState() {
-        if let previewAssistantMessage {
-            bindStreamingDisplay(
-                to: previewAssistantMessage.id,
-                targetText: previewAssistantMessage.text
-            )
+        guard forceScrollToBottom || didSnapshotChange else { return }
+
+        if didSnapshotChange {
+            renderedMessages = newMessages
+            messageDataSource.apply(newMessages)
+        }
+
+        if forceScrollToBottom {
+            tiledScrollPosition.scrollTo(edge: .bottom, animated: animated)
             return
         }
 
-        guard let currentMessageId = streamingDisplayMessageId else { return }
-
-        if let persistedMessage = storedMessages.last(where: { $0.id == currentMessageId }) {
-            bindStreamingDisplay(to: currentMessageId, targetText: persistedMessage.text)
-        } else if let liveMessage = sessionLiveMessages.last(where: { $0.id == currentMessageId }) {
-            bindStreamingDisplay(to: currentMessageId, targetText: liveMessage.text)
-        } else if streamingDisplayText == streamingTargetText {
-            clearStreamingDisplayState()
-        }
-    }
-
-    private func bindStreamingDisplay(to messageId: String, targetText: String) {
-        if streamingDisplayMessageId != messageId {
-            streamingDisplayTask?.cancel()
-            streamingDisplayTask = nil
-            streamingDisplayMessageId = messageId
-            streamingDisplayText = ""
-            streamingTargetText = ""
-        }
-
-        streamingTargetText = targetText
-        startStreamingDisplayTaskIfNeeded()
-    }
-
-    private func startStreamingDisplayTaskIfNeeded() {
-        guard streamingDisplayText != streamingTargetText else {
-            clearStreamingDisplayStateIfCaughtUp()
-            return
-        }
-        guard streamingDisplayTask == nil else { return }
-
-        streamingDisplayTask = Task { @MainActor in
-            while !Task.isCancelled {
-                let nextText = StreamingTypewriter.nextDisplayText(
-                    current: streamingDisplayText,
-                    target: streamingTargetText
-                )
-                guard nextText != streamingDisplayText else { break }
-
-                streamingDisplayText = nextText
-                try? await Task.sleep(for: StreamingTypewriter.tickInterval)
-            }
-
-            streamingDisplayTask = nil
-            clearStreamingDisplayStateIfCaughtUp()
-        }
-    }
-
-    private func clearStreamingDisplayStateIfCaughtUp() {
-        guard let currentMessageId = streamingDisplayMessageId else { return }
-        guard streamingDisplayText == streamingTargetText else { return }
-        guard previewAssistantMessage?.id != currentMessageId else { return }
-
-        streamingDisplayMessageId = nil
-        streamingDisplayText = ""
-        streamingTargetText = ""
-    }
-
-    private func clearStreamingDisplayState() {
-        streamingDisplayTask?.cancel()
-        streamingDisplayTask = nil
-        streamingDisplayMessageId = nil
-        streamingDisplayText = ""
-        streamingTargetText = ""
+        guard didSnapshotChange, isNearBottom, didTailMessageChange, nextLastMessage?.isStreaming == true else { return }
+        tiledScrollPosition.scrollTo(edge: .bottom, animated: false)
     }
 
     private func syncLiveMessages() {
@@ -471,7 +380,7 @@ struct ChatView: View {
             chatManager.chatState?.clearCompletedMessages(persistedIds: newlyPersistedIds)
         }
 
-        syncStreamingDisplayState()
+        refreshMessageSnapshot()
     }
 
     private var emptyStateOverlay: some View {
@@ -980,6 +889,7 @@ struct ChatView: View {
             timestamp: Date()
         )
         appState.appendMessage(to: session.id, message: userMsg)
+        refreshMessageSnapshot(forceScrollToBottom: true, animated: true)
 
         chatManager.sendMessage(
             text: text,
@@ -989,7 +899,6 @@ struct ChatView: View {
         )
         inputText = ""
         composerAttachments.removeAll()
-        tiledScrollPosition.scrollTo(edge: .bottom, animated: true)
     }
 
     private func beginRecording() async {
@@ -1058,31 +967,65 @@ struct ChatView: View {
         }
     }
 
-    @MainActor
     private func importPhotoAttachments(from items: [PhotosPickerItem]) async {
         for item in items {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self) else {
-                    throw AttachmentImportError.unreadable("无法读取所选图片。")
+                    throw ComposerAttachmentPreparationError.unreadable("无法读取所选图片。")
                 }
 
                 let contentType = item.supportedContentTypes.first ?? .image
-                let attachment = try makeComposerAttachment(
+                let attachment = try await prepareComposerAttachmentInBackground(
                     data: data,
                     filename: "image-\(UUID().uuidString.prefix(8)).\(contentType.preferredFilenameExtension ?? "bin")",
                     mimeType: contentType.preferredMIMEType ?? "application/octet-stream",
-                    type: attachmentType(for: contentType)
+                    type: Self.attachmentType(for: contentType)
                 )
-                composerAttachments.append(attachment)
+                await MainActor.run {
+                    composerAttachments.append(attachment)
+                }
             } catch {
-                attachmentErrorMessage = error.localizedDescription
+                await MainActor.run {
+                    attachmentErrorMessage = error.localizedDescription
+                }
             }
         }
     }
 
-    @MainActor
     private func importFileAttachments(from urls: [URL]) async {
         for url in urls {
+            do {
+                let attachment = try await prepareFileAttachment(from: url)
+                await MainActor.run {
+                    composerAttachments.append(attachment)
+                }
+            } catch {
+                await MainActor.run {
+                    attachmentErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func prepareComposerAttachmentInBackground(
+        data: Data,
+        filename: String,
+        mimeType: String,
+        type: MessageAttachmentType
+    ) async throws -> ComposerAttachment {
+        try await Task.detached(priority: .userInitiated) { [maxAttachmentBytes] in
+            try ComposerAttachment.prepared(
+                data: data,
+                filename: filename,
+                mimeType: mimeType,
+                type: type,
+                maxBytes: maxAttachmentBytes
+            )
+        }.value
+    }
+
+    private func prepareFileAttachment(from url: URL) async throws -> ComposerAttachment {
+        try await Task.detached(priority: .userInitiated) { [maxAttachmentBytes] in
             let scoped = url.startAccessingSecurityScopedResource()
             defer {
                 if scoped {
@@ -1090,45 +1033,22 @@ struct ChatView: View {
                 }
             }
 
-            do {
-                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
-                let resourceValues = try url.resourceValues(forKeys: [.contentTypeKey, .nameKey])
-                let contentType = resourceValues.contentType ?? UTType(filenameExtension: url.pathExtension) ?? .data
-                let filename = resourceValues.name ?? url.lastPathComponent
-                let attachment = try makeComposerAttachment(
-                    data: data,
-                    filename: filename,
-                    mimeType: contentType.preferredMIMEType ?? "application/octet-stream",
-                    type: attachmentType(for: contentType)
-                )
-                composerAttachments.append(attachment)
-            } catch {
-                attachmentErrorMessage = error.localizedDescription
-            }
-        }
+            let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+            let resourceValues = try url.resourceValues(forKeys: [.contentTypeKey, .nameKey])
+            let contentType = resourceValues.contentType ?? UTType(filenameExtension: url.pathExtension) ?? .data
+            let filename = resourceValues.name ?? url.lastPathComponent
+
+            return try ComposerAttachment.prepared(
+                data: data,
+                filename: filename,
+                mimeType: contentType.preferredMIMEType ?? "application/octet-stream",
+                type: Self.attachmentType(for: contentType),
+                maxBytes: maxAttachmentBytes
+            )
+        }.value
     }
 
-    private func makeComposerAttachment(
-        data: Data,
-        filename: String,
-        mimeType: String,
-        type: MessageAttachmentType
-    ) throws -> ComposerAttachment {
-        guard data.count <= maxAttachmentBytes else {
-            throw AttachmentImportError.tooLarge("“\(filename)” 超过 5 MB，当前版本暂不支持。")
-        }
-
-        return ComposerAttachment(
-            id: UUID().uuidString,
-            type: type,
-            filename: filename,
-            mimeType: mimeType,
-            size: data.count,
-            dataBase64: data.base64EncodedString()
-        )
-    }
-
-    private func attachmentType(for contentType: UTType) -> MessageAttachmentType {
+    nonisolated private static func attachmentType(for contentType: UTType) -> MessageAttachmentType {
         if contentType.conforms(to: .image) {
             return .image
         }
@@ -1139,18 +1059,6 @@ struct ChatView: View {
             return .audio
         }
         return .file
-    }
-}
-
-private enum AttachmentImportError: LocalizedError {
-    case unreadable(String)
-    case tooLarge(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .unreadable(let message), .tooLarge(let message):
-            message
-        }
     }
 }
 
