@@ -1,6 +1,7 @@
 import SwiftUI
 import ClawChatKit
 
+@MainActor
 @Observable
 final class AppState {
     private struct ParsedAgentDescriptor {
