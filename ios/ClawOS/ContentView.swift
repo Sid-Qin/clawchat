@@ -50,32 +50,25 @@ struct ContentView: View {
         }
         .preferredColorScheme(isDarkMode ? .dark : nil)
         .onAppear {
-            configureTabBarAppearance()
+            configureChromeAppearance()
         }
         .onChange(of: effectiveColorScheme, initial: true) { _, newScheme in
             appState.colorScheme = newScheme
-            configureTabBarAppearance()
+            configureChromeAppearance()
         }
         .onChange(of: appState.selectedVisualThemeID) {
-            configureTabBarAppearance()
+            configureChromeAppearance()
         }
     }
 
-    private func configureTabBarAppearance() {
-        let tabAppearance = UITabBarAppearance()
-        tabAppearance.configureWithDefaultBackground()
-        tabAppearance.backgroundEffect = UIBlurEffect(style: .systemChromeMaterial)
-        tabAppearance.backgroundColor = UIColor(appState.currentVisualTheme.tabBarFill)
-        tabAppearance.shadowColor = UIColor.separator.withAlphaComponent(0.15)
+    private func configureChromeAppearance() {
+        let theme = appState.currentVisualTheme
+        let tabAppearance = AppChromeAppearance.tabBarAppearance(for: theme)
 
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
 
-        let navAppearance = UINavigationBarAppearance()
-        navAppearance.configureWithDefaultBackground()
-        navAppearance.backgroundEffect = UIBlurEffect(style: .systemChromeMaterial)
-        navAppearance.backgroundColor = UIColor(appState.currentVisualTheme.tabBarFill)
-        navAppearance.shadowColor = UIColor.separator.withAlphaComponent(0.15)
+        let navAppearance = AppChromeAppearance.navigationBarAppearance(for: theme)
 
         UINavigationBar.appearance().standardAppearance = navAppearance
         UINavigationBar.appearance().compactAppearance = navAppearance
@@ -83,6 +76,7 @@ struct ContentView: View {
         if #available(iOS 15.0, *) {
             UINavigationBar.appearance().compactScrollEdgeAppearance = navAppearance
         }
+        UINavigationBar.appearance().tintColor = UIColor(theme.accent)
     }
 }
 

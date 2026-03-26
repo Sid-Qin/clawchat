@@ -27,7 +27,7 @@ public struct ChatRoute: Hashable, Sendable {
 
     public func matches(targetAgentId: String, targetSessionKey: String?) -> Bool {
         if let targetSessionKey {
-            if sessionKey == targetSessionKey {
+            if Self.sessionKeysMatch(sessionKey, targetSessionKey) {
                 return true
             }
 
@@ -37,6 +37,44 @@ public struct ChatRoute: Hashable, Sendable {
 
         guard sessionKey == nil else { return false }
         return agentId == targetAgentId
+    }
+
+    private static func sessionKeysMatch(_ lhs: String?, _ rhs: String?) -> Bool {
+        guard let lhs = normalizedSessionKey(lhs),
+              let rhs = normalizedSessionKey(rhs) else {
+            return false
+        }
+
+        if lhs == rhs {
+            return true
+        }
+
+        let lhsAgentRest = agentSessionRest(lhs)
+        let rhsAgentRest = agentSessionRest(rhs)
+
+        if let lhsAgentRest, let rhsAgentRest {
+            return lhsAgentRest == rhsAgentRest
+        }
+        if let lhsAgentRest {
+            return lhsAgentRest == rhs
+        }
+        if let rhsAgentRest {
+            return lhs == rhsAgentRest
+        }
+
+        return false
+    }
+
+    private static func normalizedSessionKey(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private static func agentSessionRest(_ sessionKey: String) -> String? {
+        let parts = sessionKey.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3, parts[0] == "agent" else { return nil }
+        return String(parts[2])
     }
 }
 

@@ -16,4 +16,11 @@ struct SplashThemeTests {
             #expect(theme.accent == expectedAccent, "accent mismatch for \(id)")
         }
     }
+
+    @Test("开屏旋转件沿历史锚点原地旋转")
+    func splashSpinUsesHistoricalAnchorLayout() {
+        #expect(SplashSpinSpec.logoSize == 180)
+        #expect(SplashSpinSpec.iconAnchor == UnitPoint(x: 0.178, y: 0.502))
+        #expect(SplashSpinSpec.verticalOffset(for: 1000) == -80)
+    }
 }

@@ -160,6 +160,36 @@ struct ChatStateTests {
         #expect(legacyRoute.matches(targetAgentId: "other", targetSessionKey: "session-a") == false)
     }
 
+    @Test("ChatRoute 将 Gateway agent 子会话 key 视为同一会话")
+    func chatRouteMatchesGatewayAgentSessionKey() {
+        let route = ChatRoute(
+            agentId: nil,
+            sessionKey: "agent:main:clawchat:ios:session:3b0a9f86-0431-4e04-b01d-de442e7951d5"
+        )
+
+        #expect(
+            route.matches(
+                targetAgentId: "main",
+                targetSessionKey: "clawchat:ios:session:3b0a9f86-0431-4e04-b01d-de442e7951d5"
+            )
+        )
+    }
+
+    @Test("ChatRoute 在目标会话 key 带 agent 前缀时也可匹配")
+    func chatRouteMatchesWhenTargetSessionKeyHasAgentPrefix() {
+        let route = ChatRoute(
+            agentId: nil,
+            sessionKey: "clawchat:ios:session:3b0a9f86-0431-4e04-b01d-de442e7951d5"
+        )
+
+        #expect(
+            route.matches(
+                targetAgentId: "main",
+                targetSessionKey: "agent:main:clawchat:ios:session:3b0a9f86-0431-4e04-b01d-de442e7951d5"
+            )
+        )
+    }
+
     // MARK: - Helpers
 
     private func makeStream(id: String, delta: String, phase: StreamPhase, finalText: String? = nil) -> MessageStream {

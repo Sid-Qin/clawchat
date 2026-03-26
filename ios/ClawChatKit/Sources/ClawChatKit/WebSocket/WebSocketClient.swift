@@ -54,10 +54,9 @@ public actor WebSocketClient {
 
     // MARK: - Init
 
-    public init(relayUrl: String) {
-        // Normalize URL: strip trailing slash, append /ws/app if needed
+    public init(relayUrl: String, appendDefaultPath: Bool = true) {
         var url = relayUrl.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        if !url.hasSuffix("/ws/app") {
+        if appendDefaultPath && !url.hasSuffix("/ws/app") {
             url += "/ws/app"
         }
         self.relayUrl = url

@@ -1,4 +1,5 @@
 import SwiftUI
+import ClawChatKit
 
 // MARK: - Settings View
 
@@ -19,17 +20,46 @@ struct SettingsView: View {
 
     private let bottomSafeAreaSpacing: CGFloat = 12
 
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(alignment: .leading, spacing: 28) {
-                profileCard
-                sectionBlock(title: "通用设置", cells: generalCells)
-                sectionBlock(title: "ClawChat 连接", cells: connectionCells)
-                sectionBlock(title: "法律与隐私", cells: legalCells)
+    private var settingsHeader: some View {
+        HStack {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(theme.accent)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Circle())
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 20)
+
+            Spacer()
+
+            Text("设置")
+                .font(.system(size: 17, weight: .semibold))
+
+            Spacer()
+
+            Color.clear
+                .frame(width: 36, height: 36)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            settingsHeader
+
+            ScrollView(showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 28) {
+                    profileCard
+                    sectionBlock(title: "通用设置", cells: generalCells)
+                    sectionBlock(title: "Gateway 连接", cells: connectionCells)
+                    sectionBlock(title: "法律与隐私", cells: legalCells)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 20)
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             Color.clear
@@ -44,19 +74,9 @@ struct SettingsView: View {
             )
             .ignoresSafeArea()
         }
-        .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(theme.accent)
-                }
-            }
-        }
-        .navigationBarBackButtonHidden(true)
         .background(InteractivePopGestureEnabler())
         .sheet(isPresented: $showLinkStart) {
             LoginView { showLinkStart = false }
@@ -245,7 +265,7 @@ struct SettingsView: View {
         case .connected: "已连接"
         case .connecting: "连接中…"
         case .disconnected: "已断开"
-        case .unpaired: "未配对"
+        case .unpaired: "未连接"
         case .error(let msg): "错误: \(msg)"
         }
     }
@@ -270,7 +290,7 @@ struct SettingsView: View {
             ),
             SettingsCellDescriptor(
                 id: "model", icon: "cpu", title: "默认大语言模型",
-                value: currentAgent?.model ?? "未连接",
+                value: currentModelDisplayValue,
                 kind: .info
             ),
             SettingsCellDescriptor(
@@ -278,6 +298,16 @@ struct SettingsView: View {
                 kind: .toggle($isDarkMode)
             ),
         ]
+    }
+
+    private var currentModelDisplayValue: String {
+        if let model = currentAgent?.model, !model.isEmpty {
+            return model
+        }
+        if appState.clawChatManager.connectedMethod == .direct {
+            return "由 Gateway 决定"
+        }
+        return "未连接"
     }
 
     private var connectionCells: [SettingsCellDescriptor] {
@@ -290,14 +320,14 @@ struct SettingsView: View {
             )
         ]
 
-        if appState.clawChatManager.isPaired {
+        if appState.clawChatManager.hasSavedConnection {
             cells.append(SettingsCellDescriptor(
-                id: "unpair", icon: "link.badge.plus", title: "取消配对",
+                id: "unpair", icon: "link.badge.plus", title: "断开连接",
                 kind: .destructiveButton { Task { await appState.clawChatManager.unpair() } }
             ))
         } else {
             cells.append(SettingsCellDescriptor(
-                id: "pair", icon: "antenna.radiowaves.left.and.right", title: "配对 Gateway",
+                id: "pair", icon: "antenna.radiowaves.left.and.right", title: "连接 Gateway",
                 kind: .button { withAnimation { appState.showPairing = true } }
             ))
         }

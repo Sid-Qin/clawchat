@@ -118,16 +118,13 @@ struct ClawOSApp: App {
     }
 
     private func finishSplashAfterDelay() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            KeyboardPrewarmer.warmUp()
-        }
-
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
             withAnimation(.easeOut(duration: 0.4)) {
                 showSplash = false
                 isSplashDone = true
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                KeyboardPrewarmer.warmUp()
                 checkPairingState()
             }
         }
@@ -141,14 +138,22 @@ struct ClawOSApp: App {
 
     private func handleDeepLink(_ url: URL) {
         guard let parsed = PairingDeepLink.parse(url) else { return }
-        // Show pairing overlay and auto-fill
         withAnimation { appState.showPairing = true }
-        // Post notification so PairingCardView can pick it up
-        NotificationCenter.default.post(
-            name: .clawChatDeepLink,
-            object: nil,
-            userInfo: ["relay": parsed.relay, "code": parsed.code]
-        )
+
+        switch parsed {
+        case .relay(let relay, let code):
+            NotificationCenter.default.post(
+                name: .clawChatDeepLink,
+                object: nil,
+                userInfo: ["relay": relay, "code": code]
+            )
+        case .gateway(let gatewayUrl, let token):
+            NotificationCenter.default.post(
+                name: .clawChatDeepLink,
+                object: nil,
+                userInfo: ["gatewayUrl": gatewayUrl, "gatewayToken": token]
+            )
+        }
     }
 }
 

@@ -4,12 +4,9 @@ struct SplashView: View {
     @Environment(AppState.self) private var appState
     @State private var rotation: Double = 0
 
-    private let iconAnchor = UnitPoint(x: 0.178, y: 0.502)
-
     var body: some View {
         GeometryReader { geo in
-            let logoSize: CGFloat = 180
-            let offsetY = -geo.size.height * 0.08
+            let offsetY = SplashSpinSpec.verticalOffset(for: geo.size.height)
 
             Color(.systemBackground)
                 .ignoresSafeArea()
@@ -20,7 +17,7 @@ struct SplashView: View {
                             .renderingMode(.template)
                             .scaledToFit()
                             .foregroundStyle(.primary)
-                            .frame(width: logoSize, height: logoSize)
+                            .frame(width: SplashSpinSpec.logoSize, height: SplashSpinSpec.logoSize)
 
                         Group {
                             if appState.selectedVisualThemeID == .neutral {
@@ -35,17 +32,14 @@ struct SplashView: View {
                                     .foregroundStyle(appState.currentVisualTheme.accent)
                             }
                         }
-                        .frame(width: logoSize, height: logoSize)
-                        .rotationEffect(.degrees(rotation), anchor: iconAnchor)
+                        .frame(width: SplashSpinSpec.logoSize, height: SplashSpinSpec.logoSize)
+                        .rotationEffect(.degrees(rotation), anchor: SplashSpinSpec.iconAnchor)
                     }
                     .offset(y: offsetY)
                 )
         }
         .onAppear {
-            // 慢慢旋转一圈
-            withAnimation(
-                .easeInOut(duration: 2.0)
-            ) {
+            withAnimation(.easeInOut(duration: SplashSpinSpec.rotationDuration)) {
                 rotation = 360
             }
         }

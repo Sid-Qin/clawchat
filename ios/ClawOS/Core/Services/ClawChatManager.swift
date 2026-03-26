@@ -1,8 +1,10 @@
 import Foundation
+import UIKit
 import ClawChatKit
 
-@MainActor @Observable
-final class ClawChatManager: @unchecked Sendable {
+@MainActor
+@Observable
+final class ClawChatManager {
 
     enum LinkState: Equatable {
         case unpaired
@@ -15,12 +17,21 @@ final class ClawChatManager: @unchecked Sendable {
     // MARK: - Observable state
 
     private(set) var linkState: LinkState = .unpaired
-    private(set) var chatState: ChatState?
     private(set) var connectedGatewayId: String?
-    private(set) var connectedRelayUrl: String?
+    private(set) var connectedEndpointUrl: String?
+    private(set) var connectedMethod: ConnectionMethod?
 
-    var isPaired: Bool {
+    // Relay path
+    private(set) var chatState: ChatState?
+    // Gateway direct path
+    private(set) var gatewaySession: GatewaySession?
+
+    var hasSavedConnection: Bool {
         (try? credentialStore.load()) != nil
+    }
+
+    var savedConnectionMethod: ConnectionMethod? {
+        try? credentialStore.load()?.method
     }
 
     var isConnected: Bool {
@@ -29,23 +40,29 @@ final class ClawChatManager: @unchecked Sendable {
     }
 
     var liveMessages: [ChatMessage] {
-        chatState?.messages ?? []
+        gatewaySession?.messages ?? chatState?.messages ?? []
     }
 
     var isTyping: Bool {
-        chatState?.isTyping ?? false
+        gatewaySession?.isTyping ?? chatState?.isTyping ?? false
     }
 
     func liveMessages(for agentId: String, sessionKey: String?) -> [ChatMessage] {
-        chatState?.liveMessages(for: agentId, sessionKey: sessionKey) ?? []
+        if let gw = gatewaySession {
+            return gw.liveMessages(for: agentId, sessionKey: sessionKey)
+        }
+        return chatState?.liveMessages(for: agentId, sessionKey: sessionKey) ?? []
     }
 
     func isTyping(for agentId: String, sessionKey: String?) -> Bool {
-        chatState?.isTyping(for: agentId, sessionKey: sessionKey) ?? false
+        if let gw = gatewaySession {
+            return gw.isTyping(for: agentId, sessionKey: sessionKey)
+        }
+        return chatState?.isTyping(for: agentId, sessionKey: sessionKey) ?? false
     }
 
     var gatewayOnline: Bool {
-        chatState?.gatewayOnline ?? false
+        gatewaySession?.gatewayOnline ?? chatState?.gatewayOnline ?? false
     }
 
     // MARK: - Internal
@@ -56,17 +73,29 @@ final class ClawChatManager: @unchecked Sendable {
 
     weak var appState: AppState?
 
-    // MARK: - Auto connect
+    // MARK: - Auto connect (unified)
 
     func autoConnect() async {
-        guard let credentials = try? credentialStore.load() else {
+        guard let profile = try? credentialStore.load() else {
             linkState = .unpaired
             return
         }
-        await connect(relayUrl: credentials.relayUrl, deviceToken: credentials.deviceToken)
+
+        switch profile.method {
+        case .relay:
+            await reconnectRelay(
+                endpointUrl: profile.endpointUrl,
+                deviceToken: profile.deviceToken
+            )
+        case .direct:
+            await reconnectGateway(
+                endpointUrl: profile.endpointUrl,
+                deviceToken: profile.deviceToken
+            )
+        }
     }
 
-    // MARK: - Pair
+    // MARK: - Relay Pair (existing flow)
 
     func pair(relayUrl: String, code: String, deviceName: String) async throws {
         linkState = .connecting
@@ -80,22 +109,23 @@ final class ClawChatManager: @unchecked Sendable {
 
         do {
             let result = try await manager.pair(code: code, deviceName: deviceName)
-            try credentialStore.save(
+            try credentialStore.saveRelay(
                 deviceToken: result.deviceToken,
                 relayUrl: relayUrl,
                 gatewayId: result.gatewayId
             )
             connectedGatewayId = result.gatewayId
-            connectedRelayUrl = relayUrl
+            connectedEndpointUrl = relayUrl
+            connectedMethod = .relay
             startChatState(client: client)
             chatState?.setGatewayOnline(true)
             linkState = .connected
             syncToAppState(
                 gatewayId: result.gatewayId,
-                relayUrl: relayUrl,
-                agentIds: result.agents ?? ["default"]
+                endpointUrl: relayUrl,
+                agentIds: result.agents ?? ["default"],
+                method: .relay
             )
-            // Request latest agents from gateway (relay may return stale/empty list)
             await client.send(StatusRequest())
         } catch {
             linkState = .error(error.localizedDescription)
@@ -103,12 +133,58 @@ final class ClawChatManager: @unchecked Sendable {
         }
     }
 
-    // MARK: - Reconnect
+    // MARK: - Gateway Direct Connect (native protocol)
 
-    func connect(relayUrl: String, deviceToken: String) async {
+    func connectGateway(url: String, token: String) async throws {
         linkState = .connecting
 
-        let client = WebSocketClient(relayUrl: relayUrl)
+        let session = try GatewaySession(
+            gatewayUrl: url,
+            token: token,
+            displayName: UIDevice.current.name
+        )
+
+        do {
+            setupGatewaySessionCallbacks(session)
+            let helloOk = try await session.connect()
+
+            let deviceToken = helloOk.auth?.deviceToken ?? token
+            let gatewayId = helloOk.server?.connId ?? "gateway"
+
+            try credentialStore.saveDirect(
+                deviceToken: deviceToken,
+                gatewayUrl: url,
+                gatewayId: gatewayId
+            )
+
+            connectedGatewayId = gatewayId
+            connectedEndpointUrl = url
+            connectedMethod = .direct
+            gatewaySession = session
+            linkState = .connected
+
+            let agentId = helloOk.snapshot?.sessionDefaults?.defaultAgentId ?? "default"
+            syncToAppState(
+                gatewayId: gatewayId,
+                endpointUrl: url,
+                agentIds: [agentId],
+                method: .direct
+            )
+            Task { @MainActor [weak session] in
+                await session?.refreshSessionModel(sessionKey: session?.defaultSessionKey, agentId: agentId)
+            }
+        } catch {
+            linkState = .error(error.localizedDescription)
+            throw error
+        }
+    }
+
+    // MARK: - Relay Reconnect
+
+    private func reconnectRelay(endpointUrl: String, deviceToken: String) async {
+        linkState = .connecting
+
+        let client = WebSocketClient(relayUrl: endpointUrl)
         webSocketClient = client
         await client.connect()
 
@@ -119,30 +195,77 @@ final class ClawChatManager: @unchecked Sendable {
             let result = try await manager.reconnect(deviceToken: deviceToken)
 
             if let newToken = result.newDeviceToken {
-                try? credentialStore.save(
-                    deviceToken: newToken,
-                    relayUrl: relayUrl,
-                    gatewayId: result.gatewayId
-                )
+                try? credentialStore.save(profile: ConnectionProfile(
+                    method: .relay,
+                    endpointUrl: endpointUrl,
+                    gatewayId: result.gatewayId,
+                    deviceToken: newToken
+                ))
             }
 
             connectedGatewayId = result.gatewayId
-            connectedRelayUrl = relayUrl
+            connectedEndpointUrl = endpointUrl
+            connectedMethod = .relay
             startChatState(client: client)
             chatState?.setGatewayOnline(result.gatewayOnline)
             linkState = .connected
             syncToAppState(
                 gatewayId: result.gatewayId,
-                relayUrl: relayUrl,
-                agentIds: result.agents ?? ["default"]
+                endpointUrl: endpointUrl,
+                agentIds: result.agents ?? ["default"],
+                method: .relay
             )
-            // Request latest agents from gateway (relay may return stale/empty list)
             await client.send(StatusRequest())
         } catch {
-            // Don't set .error for transient failures — stay .disconnected
-            // so reconnect can be triggered later (e.g. on send or app foreground)
             linkState = .disconnected
-            print("[ClawChatManager] connect failed: \(error.localizedDescription)")
+            print("[ClawChatManager] relay reconnect failed: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Gateway Reconnect (uses deviceToken via native protocol)
+
+    private func reconnectGateway(endpointUrl: String, deviceToken: String) async {
+        linkState = .connecting
+
+        do {
+            let session = try GatewaySession(
+                gatewayUrl: endpointUrl,
+                deviceToken: deviceToken,
+                displayName: UIDevice.current.name
+            )
+            setupGatewaySessionCallbacks(session)
+            let helloOk = try await session.connect()
+
+            if let newToken = helloOk.auth?.deviceToken, newToken != deviceToken {
+                let gatewayId = helloOk.server?.connId ?? "gateway"
+                try? credentialStore.save(profile: ConnectionProfile(
+                    method: .direct,
+                    endpointUrl: endpointUrl,
+                    gatewayId: gatewayId,
+                    deviceToken: newToken
+                ))
+            }
+
+            let gatewayId = helloOk.server?.connId ?? connectedGatewayId ?? "gateway"
+            connectedGatewayId = gatewayId
+            connectedEndpointUrl = endpointUrl
+            connectedMethod = .direct
+            gatewaySession = session
+            linkState = .connected
+
+            let agentId = helloOk.snapshot?.sessionDefaults?.defaultAgentId ?? "default"
+            syncToAppState(
+                gatewayId: gatewayId,
+                endpointUrl: endpointUrl,
+                agentIds: [agentId],
+                method: .direct
+            )
+            Task { @MainActor [weak session] in
+                await session?.refreshSessionModel(sessionKey: session?.defaultSessionKey, agentId: agentId)
+            }
+        } catch {
+            linkState = .disconnected
+            print("[ClawChatManager] gateway reconnect failed: \(error.localizedDescription)")
         }
     }
 
@@ -151,9 +274,14 @@ final class ClawChatManager: @unchecked Sendable {
     func disconnect() async {
         presenceObserverTask?.cancel()
         presenceObserverTask = nil
+
         chatState?.setGatewayOnline(false)
         chatState?.stop()
         chatState = nil
+
+        gatewaySession?.stop()
+        gatewaySession = nil
+
         await webSocketClient?.close()
         webSocketClient = nil
         linkState = .disconnected
@@ -167,7 +295,8 @@ final class ClawChatManager: @unchecked Sendable {
         await disconnect()
         try? credentialStore.clear()
         connectedGatewayId = nil
-        connectedRelayUrl = nil
+        connectedEndpointUrl = nil
+        connectedMethod = nil
         linkState = .unpaired
     }
 
@@ -179,30 +308,37 @@ final class ClawChatManager: @unchecked Sendable {
         sessionKey: String? = nil,
         attachments: [MessageAttachment] = []
     ) {
-        // If disconnected, try to recover before sending
+        if let gw = gatewaySession {
+            gw.sendMessage(text: text, sessionKey: sessionKey, agentId: agentId)
+            return
+        }
+
         if case .disconnected = linkState {
-            Task {
-                await webSocketClient?.reconnectIfNeeded()
-            }
+            Task { await webSocketClient?.reconnectIfNeeded() }
         } else if case .error = linkState {
-            Task {
-                await webSocketClient?.reconnectIfNeeded()
-            }
+            Task { await webSocketClient?.reconnectIfNeeded() }
         }
         chatState?.sendMessage(text: text, agentId: agentId, sessionKey: sessionKey, attachments: attachments)
     }
 
     @MainActor
-    private func syncToAppState(gatewayId: String, relayUrl: String, agentIds: [String], agentsMeta: [String: AgentMeta]? = nil) {
+    private func syncToAppState(
+        gatewayId: String,
+        endpointUrl: String,
+        agentIds: [String],
+        agentsMeta: [String: AgentMeta]? = nil,
+        method: ConnectionMethod = .relay
+    ) {
         appState?.applyConnectionInfo(
             gatewayId: gatewayId,
-            relayUrl: relayUrl,
+            endpointUrl: endpointUrl,
             agentIds: agentIds,
-            agentsMeta: agentsMeta
+            agentsMeta: agentsMeta,
+            connectionMethod: method
         )
     }
 
-    // MARK: - Helpers
+    // MARK: - Relay Chat State Setup
 
     private func startChatState(client: WebSocketClient) {
         let state = ChatState(client: client)
@@ -212,24 +348,27 @@ final class ClawChatManager: @unchecked Sendable {
         state.onAppConnected = { [weak self] connected in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if let newToken = connected.newDeviceToken {
-                    let relayUrl = self.connectedRelayUrl ?? ""
-                    try? self.credentialStore.save(
-                        deviceToken: newToken,
-                        relayUrl: relayUrl,
-                        gatewayId: connected.gatewayId
-                    )
+                if let newToken = connected.newDeviceToken,
+                   let endpointUrl = self.connectedEndpointUrl,
+                   let method = self.connectedMethod {
+                    try? self.credentialStore.save(profile: ConnectionProfile(
+                        method: method,
+                        endpointUrl: endpointUrl,
+                        gatewayId: connected.gatewayId,
+                        deviceToken: newToken
+                    ))
                     print("[ClawChatManager] token rotated and saved")
                 }
                 self.chatState?.setGatewayOnline(connected.gatewayOnline ?? false)
                 self.linkState = .connected
 
                 if let agents = connected.agents, !agents.isEmpty,
-                   let relayUrl = self.connectedRelayUrl {
+                   let endpointUrl = self.connectedEndpointUrl {
                     self.syncToAppState(
                         gatewayId: connected.gatewayId,
-                        relayUrl: relayUrl,
-                        agentIds: agents
+                        endpointUrl: endpointUrl,
+                        agentIds: agents,
+                        method: self.connectedMethod ?? .relay
                     )
                 }
             }
@@ -239,14 +378,15 @@ final class ClawChatManager: @unchecked Sendable {
             Task { @MainActor [weak self] in
                 guard let self,
                       let gatewayId = self.connectedGatewayId,
-                      let relayUrl = self.connectedRelayUrl else { return }
+                      let endpointUrl = self.connectedEndpointUrl else { return }
                 self.syncToAppState(
                     gatewayId: gatewayId,
-                    relayUrl: relayUrl,
+                    endpointUrl: endpointUrl,
                     agentIds: status.agents ?? [],
-                    agentsMeta: status.agentsMeta
+                    agentsMeta: status.agentsMeta,
+                    method: self.connectedMethod ?? .relay
                 )
-                print("[ClawChatManager] agents refreshed from status.response: \(status.agents?.count ?? 0) agents")
+                print("[ClawChatManager] agents refreshed: \(status.agents?.count ?? 0) agents")
             }
         }
 
@@ -259,18 +399,77 @@ final class ClawChatManager: @unchecked Sendable {
 
         Task {
             await client.setReconnectHandler { [weak self] in
-                Task { @MainActor in
-                    self?.handleWebSocketReconnect()
+                Task { [weak self] in
+                    await self?.handleRelayReconnect()
                 }
             }
         }
 
-        observeGatewayPresence()
+        observeRelayPresence()
     }
+
+    // MARK: - Gateway Session Callbacks
+
+    private func setupGatewaySessionCallbacks(_ session: GatewaySession) {
+        session.onFatalError = { [weak self] message in
+            print("[ClawChatManager] gateway fatal: \(message)")
+            Task { [weak self] in
+                await self?.unpair()
+            }
+        }
+
+        session.onAgentsDiscovered = { [weak self] agentIds in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let gatewayId = self.connectedGatewayId,
+                      let endpointUrl = self.connectedEndpointUrl else { return }
+                self.syncToAppState(
+                    gatewayId: gatewayId,
+                    endpointUrl: endpointUrl,
+                    agentIds: agentIds,
+                    method: .direct
+                )
+                print("[ClawChatManager] gateway agents discovered: \(agentIds)")
+            }
+        }
+
+        session.onAgentsCatalogLoaded = { [weak self] catalog in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let gatewayId = self.connectedGatewayId,
+                      let endpointUrl = self.connectedEndpointUrl else { return }
+                self.syncToAppState(
+                    gatewayId: gatewayId,
+                    endpointUrl: endpointUrl,
+                    agentIds: catalog.agentIds,
+                    agentsMeta: catalog.agentsMeta,
+                    method: .direct
+                )
+                print("[ClawChatManager] gateway catalog loaded: \(catalog.agentIds)")
+            }
+        }
+
+        session.onSessionModelResolved = { [weak self] selection, agentId in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let displayValue = selection.displayValue else { return }
+                self.appState?.updateAgentRuntimeModel(id: agentId, modelDisplayValue: displayValue)
+                print("[ClawChatManager] gateway session model resolved: \(agentId) -> \(displayValue)")
+            }
+        }
+
+        session.onTokenUsageReported = { [weak self] usage, agentId in
+            Task { @MainActor [weak self] in
+                self?.appState?.addTokenUsage(agentId: agentId, tokens: usage.totalTokens)
+            }
+        }
+    }
+
+    // MARK: - Relay Presence & Reconnect
 
     private var presenceObserverTask: Task<Void, Never>?
 
-    private func observeGatewayPresence() {
+    private func observeRelayPresence() {
         presenceObserverTask?.cancel()
         presenceObserverTask = Task { @MainActor [weak self] in
             var wasOnline = self?.chatState?.gatewayOnline ?? false
@@ -281,7 +480,7 @@ final class ClawChatManager: @unchecked Sendable {
 
                 let isOnline = self.chatState?.gatewayOnline ?? false
                 if isOnline && !wasOnline {
-                    self.handleWebSocketReconnect()
+                    self.handleRelayReconnect()
                 }
                 wasOnline = isOnline
             }
@@ -289,20 +488,18 @@ final class ClawChatManager: @unchecked Sendable {
     }
 
     @MainActor
-    private func handleWebSocketReconnect() {
-        guard let credentials = try? credentialStore.load(),
+    private func handleRelayReconnect() {
+        guard let profile = try? credentialStore.load(),
+              profile.method == .relay,
               let client = webSocketClient else {
-            print("[ClawChatManager] handleWebSocketReconnect: no credentials or client")
             return
         }
-        print("[ClawChatManager] handleWebSocketReconnect: re-sending app.connect")
+        print("[ClawChatManager] relay reconnect: re-sending app.connect")
 
         linkState = .connecting
-        let message = AppConnect(deviceToken: credentials.deviceToken)
+        let message = AppConnect(deviceToken: profile.deviceToken)
         Task {
             await client.send(message)
-            // Don't set .connected here — wait for onAppConnected callback
-            // which also handles token rotation and gateway state
         }
     }
 }

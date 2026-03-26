@@ -31,7 +31,7 @@ public actor PairingManager {
         await client.send(message)
 
         let timeout = pairingTimeout
-        let messages = await client.messages
+        let messages = client.messages
 
         return try await withThrowingTaskGroup(of: PairingResult.self) { group in
             group.addTask {
@@ -72,7 +72,7 @@ public actor PairingManager {
         await client.send(message)
 
         let timeout = pairingTimeout
-        let messages = await client.messages
+        let messages = client.messages
 
         return try await withThrowingTaskGroup(of: ReconnectResult.self) { group in
             group.addTask {
@@ -123,7 +123,7 @@ public actor PairingManager {
     private static func mapServerError(_ error: ErrorMessage) -> PairingError {
         switch error.code {
         case .unauthorized:
-            return .unauthorized
+            return .invalidDeviceToken
         case .unknown(let raw) where raw == "device_limit" || raw == "connection_limit":
             return .deviceLimit
         default:

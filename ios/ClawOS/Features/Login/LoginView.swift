@@ -61,11 +61,11 @@ struct LoginView: View {
                     Text("LINK START")
                         .font(.system(size: 16, weight: .bold, design: .monospaced))
                         .tracking(2)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(colorScheme == .dark ? .black : .white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
-                        .background(Color.black, in: Capsule())
-                        .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
+                        .background(Color(.label), in: Capsule())
+                        .shadow(color: Color(.label).opacity(0.3), radius: 12, y: 4)
                 }
                 .buttonStyle(BounceButtonStyle())
 
