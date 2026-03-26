@@ -500,4 +500,15 @@ struct ClawOSTests {
         #expect(shouldDismiss)
     }
 
+    @Test("Aha 故事内容区下拉不会触发退出手势")
+    func momentDismissIgnoresVerticalPullInsideContent() {
+        let axis = MomentDismissGestureBehavior.beginAxis(
+            startLocation: CGPoint(x: 220, y: 520),
+            translation: CGSize(width: 12, height: 72),
+            allowsContentHorizontalDismiss: true
+        )
+
+        #expect(axis == nil)
+    }
+
 }

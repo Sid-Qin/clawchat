@@ -34,7 +34,6 @@ enum MomentDismissGestureBehavior {
     ) -> MomentDismissAxis? {
         let dx = translation.width
         let dy = translation.height
-        let absDx = abs(dx)
         let absDy = abs(dy)
         let startsFromEdge = startLocation.x <= edgeActivationWidth
 
@@ -52,11 +51,6 @@ enum MomentDismissGestureBehavior {
            dx > contentHorizontalDistance,
            dx > absDy * contentHorizontalDominance {
             return .horizontal
-        }
-
-        if dy > verticalDistance,
-           dy > absDx * verticalDominance {
-            return .vertical
         }
 
         return nil

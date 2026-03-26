@@ -440,7 +440,6 @@ struct MomentDetailView: View {
                 )
             }
             .contentShape(Rectangle())
-            .gesture(cardDragGesture)
         )
         .clipShape(
             UnevenRoundedRectangle(
