@@ -36,13 +36,11 @@ jobs:
           if echo "$FULL" | grep -qE '20[0-9]{6}\.[0-9]+'; then
             DATE_PART=$(echo "$FULL" | grep -oE '20[0-9]{6}')
             SEQ_PART=$(echo "$FULL" | grep -oE '20[0-9]{6}\.([0-9]+)' | sed 's/.*\.//')
-            SEQ_PART=$(printf '%02d' "$SEQ_PART")
             BUILD="${DATE_PART}${SEQ_PART}"
           elif echo "$FULL" | grep -qE '20[0-9]{6}'; then
-            DATE_PART=$(echo "$FULL" | grep -oE '20[0-9]{6}')
-            BUILD="${DATE_PART}01"
+            BUILD=$(echo "$FULL" | grep -oE '20[0-9]{6}')
           else
-            BUILD=$(date +%Y%m%d)01
+            BUILD=$(date +%Y%m%d)1
           fi
 
           # Full version string for display (e.g. 0.0.1-beta.20260319.5)
@@ -85,6 +83,9 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26'
+
+      - name: Download iOS platform
+        run: xcodebuild -downloadPlatform iOS
 
       - name: Install Apple certificates
         env:
@@ -150,7 +151,8 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="LBN3W98T26" \
-            PROVISIONING_PROFILE_SPECIFIER="ClawChat App Store"
+            PROVISIONING_PROFILE_SPECIFIER="ClawChat App Store" \
+            SWIFT_STRICT_CONCURRENCY=minimal
 
       - name: Export IPA
         working-directory: ios
