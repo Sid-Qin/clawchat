@@ -409,6 +409,16 @@ struct ClawOSTests {
         #expect(state.isSplashDone == false)
     }
 
+    @Test("Relay 配对默认地址为空")
+    func relayPairingDefaultAddressIsEmpty() {
+        #expect(PairingDefaults.relayUrl.isEmpty)
+    }
+
+    @Test("开屏结束后不再预热键盘避免闪烁")
+    func splashCompletionDoesNotPrewarmKeyboard() {
+        #expect(KeyboardPrewarmer.isEnabled == false)
+    }
+
     @Test("东京行程故事文案不包含乱码替代字符")
     func ahaTravelStoryCopyHasNoReplacementCharacters() {
         let content = DashboardViewModel.defaultMoments
