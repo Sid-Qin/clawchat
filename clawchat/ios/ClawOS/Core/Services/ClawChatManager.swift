@@ -138,7 +138,7 @@ final class ClawChatManager {
     func connectGateway(url: String, token: String) async throws {
         linkState = .connecting
 
-        let session = GatewaySession(
+        let session = try GatewaySession(
             gatewayUrl: url,
             token: token,
             displayName: UIDevice.current.name
@@ -227,13 +227,12 @@ final class ClawChatManager {
     private func reconnectGateway(endpointUrl: String, deviceToken: String) async {
         linkState = .connecting
 
-        let session = GatewaySession(
-            gatewayUrl: endpointUrl,
-            deviceToken: deviceToken,
-            displayName: UIDevice.current.name
-        )
-
         do {
+            let session = try GatewaySession(
+                gatewayUrl: endpointUrl,
+                deviceToken: deviceToken,
+                displayName: UIDevice.current.name
+            )
             setupGatewaySessionCallbacks(session)
             let helloOk = try await session.connect()
 

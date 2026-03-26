@@ -1,6 +1,11 @@
 import Foundation
 import CryptoKit
 
+/// Failure to persist the device private key to Keychain (connect would use an ephemeral identity).
+public enum DeviceIdentityError: Error, Sendable {
+    case persistenceFailed(underlying: Error)
+}
+
 /// Manages an Ed25519 device identity for Gateway authentication.
 /// The key pair is generated once and persisted in Keychain.
 public struct DeviceIdentity: Sendable {
@@ -12,11 +17,11 @@ public struct DeviceIdentity: Sendable {
 
     // MARK: - Load or Create
 
-    public static func loadOrCreate(keychain: KeychainStore = KeychainStore()) -> DeviceIdentity {
+    public static func loadOrCreate(keychain: KeychainStore = KeychainStore()) throws -> DeviceIdentity {
         if let existing = try? load(keychain: keychain) {
             return existing
         }
-        return create(keychain: keychain)
+        return try create(keychain: keychain)
     }
 
     private static func load(keychain: KeychainStore) throws -> DeviceIdentity? {
@@ -27,13 +32,13 @@ public struct DeviceIdentity: Sendable {
         return try DeviceIdentity(rawRepresentation: rawData)
     }
 
-    private static func create(keychain: KeychainStore) -> DeviceIdentity {
+    private static func create(keychain: KeychainStore) throws -> DeviceIdentity {
         let privateKey = Curve25519.Signing.PrivateKey()
         let raw = privateKey.rawRepresentation
         do {
             try keychain.save(key: keychainKey, value: raw.base64EncodedString())
         } catch {
-            print("[DeviceIdentity] failed to persist private key: \(error)")
+            throw DeviceIdentityError.persistenceFailed(underlying: error)
         }
         return DeviceIdentity(privateKey: privateKey)
     }

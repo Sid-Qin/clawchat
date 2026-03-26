@@ -17,7 +17,7 @@ struct DeviceIdentityTests {
         let keychain = KeychainStore(service: "com.clawchat.test.identity.\(UUID().uuidString)")
         try keychain.save(key: "gateway_device_private_key", value: Data([0x01]).base64EncodedString())
 
-        let identity = DeviceIdentity.loadOrCreate(keychain: keychain)
+        let identity = try DeviceIdentity.loadOrCreate(keychain: keychain)
         let block = try identity.signConnectRequest(
             clientId: GatewayProtocol.clientId,
             clientMode: GatewayProtocol.clientMode,
@@ -40,7 +40,7 @@ struct DeviceIdentityTests {
     @Test("GatewayConnectParams make signs device auth block")
     func gatewayConnectParamsMakeSignsDeviceBlock() throws {
         let keychain = KeychainStore(service: "com.clawchat.test.identity.\(UUID().uuidString)")
-        let identity = DeviceIdentity.loadOrCreate(keychain: keychain)
+        let identity = try DeviceIdentity.loadOrCreate(keychain: keychain)
 
         let params = try GatewayConnectParams.make(
             token: "token-123",

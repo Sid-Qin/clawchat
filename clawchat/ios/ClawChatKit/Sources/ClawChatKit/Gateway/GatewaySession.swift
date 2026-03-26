@@ -48,6 +48,8 @@ public final class GatewaySession {
     private var reconnectTask: Task<Void, Never>?
     private var responseContinuations: [String: CheckedContinuation<Data, Error>] = [:]
     private var handshakeContinuation: CheckedContinuation<GatewayHelloOk, Error>?
+    /// Run IDs for which `chat.event` already reported server-side token usage (per-run; avoids cross-talk between concurrent sends).
+    private var runIdsWithReportedServerUsage: Set<String> = []
 
     private var isUsingDeviceAuth: Bool {
         savedDeviceToken != nil || deviceToken != nil
@@ -60,14 +62,14 @@ public final class GatewaySession {
         token: String? = nil,
         deviceToken: String? = nil,
         displayName: String = "iPhone"
-    ) {
+    ) throws {
         let url = gatewayUrl.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         self.gatewayUrl = url
         self.token = token
         self.deviceToken = deviceToken
         self.displayName = displayName
         self.session = URLSession(configuration: .default)
-        self.identity = DeviceIdentity.loadOrCreate()
+        self.identity = try DeviceIdentity.loadOrCreate()
     }
 
     // MARK: - Lifecycle
@@ -110,6 +112,7 @@ public final class GatewaySession {
         webSocketTask = nil
         failPendingRequests(with: GatewayProtocolError.connectionClosed)
         thinkingTracker.clear()
+        runIdsWithReportedServerUsage.removeAll()
         isTyping = false
         setConnectionState(.disconnected)
         gatewayOnline = false
@@ -423,14 +426,11 @@ public final class GatewaySession {
     // MARK: - Chat Event → ChatMessage
 
     @MainActor
-    private var serverUsageReceived = false
-
-    @MainActor
     private func handleChatEvent(_ event: GatewayChatEvent) {
         endThinking(runId: event.runId)
         messages = GatewayMessageReducer.applying(event, to: messages)
         if let usage = event.usage, usage.totalTokens > 0 {
-            serverUsageReceived = true
+            runIdsWithReportedServerUsage.insert(event.runId)
             reportUsage(usage)
         }
     }
@@ -439,7 +439,7 @@ public final class GatewaySession {
     @MainActor
     private func awaitRunCompletionAndHydrate(runId: String, sessionKey: String) async -> Bool {
         defer { endThinking(runId: runId) }
-        serverUsageReceived = false
+        var gotUsageFromWait = false
         do {
             let waitResult: GatewayAgentWaitResult = try await request(
                 method: "agent.wait",
@@ -448,7 +448,8 @@ public final class GatewaySession {
             )
 
             if let usage = waitResult.usage, usage.totalTokens > 0 {
-                serverUsageReceived = true
+                gotUsageFromWait = true
+                runIdsWithReportedServerUsage.remove(runId)
                 reportUsage(usage)
             }
 
@@ -489,7 +490,8 @@ public final class GatewaySession {
                 )
             }
         }
-        return serverUsageReceived
+        let gotUsageFromStream = runIdsWithReportedServerUsage.remove(runId) != nil
+        return gotUsageFromWait || gotUsageFromStream
     }
 
     @MainActor
@@ -699,6 +701,7 @@ public final class GatewaySession {
         webSocketTask = nil
         failPendingRequests(with: error)
         thinkingTracker.clear()
+        runIdsWithReportedServerUsage.removeAll()
         isTyping = false
         gatewayOnline = false
         setConnectionState(.disconnected)
