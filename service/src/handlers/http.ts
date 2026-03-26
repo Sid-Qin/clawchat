@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import type { DbStore } from "../db.js";
 import { stats } from "../connections.js";
 import { generatePairingCode } from "../util.js";
@@ -11,6 +12,8 @@ import { checkRateLimit } from "../rate-limit.js";
 
 export function createHttpRoutes(db: DbStore): Hono {
   const app = new Hono();
+
+  app.use("*", cors());
 
   // Rate limit middleware: 30 requests per minute per IP (skip health check)
   app.use("*", async (c, next) => {
