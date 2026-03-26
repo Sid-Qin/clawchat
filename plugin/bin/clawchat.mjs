@@ -32,10 +32,22 @@ function runCommand(command, args = []) {
 // Config helpers (read/write ~/.openclaw/openclaw.json directly)
 // ---------------------------------------------------------------------------
 
-const CONFIG_DIR = process.env.OPENCLAW_STATE_DIR
-  ? path.resolve(process.env.OPENCLAW_STATE_DIR)
-  : path.join(os.homedir(), ".openclaw");
-const CONFIG_PATH = path.join(CONFIG_DIR, "openclaw.json");
+function getConfigPath() {
+  // 1. --config flag
+  const configIdx = process.argv.indexOf("--config");
+  if (configIdx > -1 && process.argv[configIdx + 1]) {
+    return path.resolve(process.argv[configIdx + 1]);
+  }
+  // 2. OPENCLAW_STATE_DIR env var
+  if (process.env.OPENCLAW_STATE_DIR) {
+    return path.join(path.resolve(process.env.OPENCLAW_STATE_DIR), "openclaw.json");
+  }
+  // 3. default
+  return path.join(os.homedir(), ".openclaw", "openclaw.json");
+}
+
+const CONFIG_PATH = getConfigPath();
+const CONFIG_DIR = path.dirname(CONFIG_PATH);
 const EXTENSIONS_DIR = path.join(CONFIG_DIR, "extensions");
 const PLUGIN_ID = "clawchat";
 const NPM_PACKAGE = "@claw-os/clawchat";
@@ -224,9 +236,20 @@ switch (command) {
   case "pair":
     await pair();
     break;
+  case "--help":
+  case "-h":
+    console.log("Usage:");
+    console.log("  npx @claw-os/clawchat install [--config PATH]  — install and configure");
+    console.log("  npx @claw-os/clawchat pair [--config PATH]     — generate pairing QR code");
+    console.log("");
+    console.log("Options:");
+    console.log("  --config PATH    Path to openclaw.json (default: ~/.openclaw/openclaw.json)");
+    console.log("                   Can also set OPENCLAW_STATE_DIR env var");
+    break;
   default:
     console.log("Usage:");
-    console.log("  npx @claw-os/clawchat install  — install and configure");
-    console.log("  npx @claw-os/clawchat pair     — generate pairing QR code");
+    console.log("  npx @claw-os/clawchat install [--config PATH]  — install and configure");
+    console.log("  npx @claw-os/clawchat pair [--config PATH]     — generate pairing QR code");
+    console.log("  npx @claw-os/clawchat --help                  — show help");
     process.exit(1);
 }

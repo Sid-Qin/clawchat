@@ -1,15 +1,18 @@
 /**
  * /clawchat pair — fetch a pairing code from the relay via HTTP and return
- * an ASCII QR code in the chat response (same pattern as device-pair plugin).
+ * a QR code for pairing.
+ *
+ * - Terminal / CLI channels → ASCII QR in a code block
+ * - Other channels (Lark, web, etc.) → PNG image via mediaUrl
  */
 
 import type { ClawChatAccount } from "./types.js";
-import { buildDeepLink, renderQrAscii } from "./qr.js";
+import { buildDeepLink, renderQrAscii, renderQrDataUri } from "./qr.js";
 
 export async function handlePairCommand(
-  ctx: unknown,
+  ctx: any,
   account: ClawChatAccount,
-): Promise<{ text: string }> {
+): Promise<{ text: string; mediaUrl?: string }> {
   const httpUrl = account.relay
     .replace(/^wss:\/\//, "https://")
     .replace(/^ws:\/\//, "http://");
@@ -30,10 +33,10 @@ export async function handlePairCommand(
   }
 
   const deepLink = buildDeepLink(account.relay, data.code);
-  const qrAscii = await renderQrAscii(deepLink);
   const expires = new Date(data.expiresAt).toLocaleTimeString();
+  const qrAscii = await renderQrAscii(deepLink);
 
-  const lines = [
+  const text = [
     "Scan this QR code with the ClawChat app:",
     "",
     "```",
@@ -43,7 +46,16 @@ export async function handlePairCommand(
     `Pairing Code: \`${data.code}\``,
     `Relay: \`${account.relay}\``,
     `Expires: ${expires}`,
-  ];
+  ].join("\n");
 
-  return { text: lines.join("\n") };
+  // Also generate a PNG image as data URI for channels that support it (e.g. Lark).
+  // Channels that don't support mediaUrl will just show the ASCII QR above.
+  let mediaUrl: string | undefined;
+  try {
+    mediaUrl = await renderQrDataUri(deepLink);
+  } catch {
+    // Ignore — ASCII fallback is always present
+  }
+
+  return { text, mediaUrl };
 }
