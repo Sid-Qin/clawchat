@@ -138,6 +138,10 @@ struct AgentHubView: View {
             }
         } label: {
             headerControlIcon(systemName: currentGwIcon)
+                .overlay(alignment: .topTrailing) {
+                    connectionDot
+                        .offset(x: 0, y: 0)
+                }
         }
     }
 
@@ -153,15 +157,15 @@ struct AgentHubView: View {
             .adaptiveGlass(in: .circle, interactive: AgentHubHeaderChrome.settingsUsesLiquidGlass)
     }
 
-    private var gwStatusDot: some View {
-        let color: Color = switch appState.currentGateway?.status {
-        case .online: .green
-        case .error: .red
-        default: Color(.systemGray3)
+    private var connectionDot: some View {
+        let color: Color = switch appState.clawChatManager.linkState {
+        case .connected: .green
+        case .connecting: .orange
+        default: appState.currentVisualTheme.softStroke
         }
         return Circle()
             .fill(color)
-            .frame(width: 7, height: 7)
+            .frame(width: 8, height: 8)
     }
 
     private var currentGwIcon: String {

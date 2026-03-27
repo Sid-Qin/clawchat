@@ -91,16 +91,16 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity)
-                .frame(height: 36)
+                .frame(height: 40)
                 .adaptiveGlass(in: .capsule)
                 .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
             }
 
             if !isSearchExpanded {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 36, height: 36)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .frame(width: 40, height: 40)
                     .contentShape(Circle())
                     .adaptiveGlass(in: .circle)
                     .onTapGesture {
@@ -113,8 +113,8 @@ struct HomeView: View {
 
             Image(systemName: "square.and.pencil")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 36, height: 36)
+                .foregroundStyle(.primary)
+                .frame(width: 40, height: 40)
                 .contentShape(Circle())
                 .adaptiveGlass(in: .circle)
                 .onTapGesture {
@@ -176,13 +176,13 @@ struct HomeView: View {
             }
         } label: {
             Image(systemName: gwTypeIcon)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(.primary)
-                .frame(width: 36, height: 36)
+                .frame(width: 40, height: 40)
                 .adaptiveGlass(in: .circle)
                 .overlay(alignment: .topTrailing) {
                     connectionDot
-                        .offset(x: 1, y: 1)
+                        .offset(x: 0, y: 0)
                 }
         }
     }
