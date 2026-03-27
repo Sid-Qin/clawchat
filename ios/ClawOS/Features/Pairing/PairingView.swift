@@ -35,29 +35,16 @@ enum PairingDeepLink {
 
 struct PairingOverlay: View {
     @Environment(AppState.self) private var appState
-    @Namespace private var glassNS
-
-    private var shouldShow: Bool {
-        appState.showPairing
-    }
 
     var body: some View {
-        ZStack {
-            if shouldShow {
-                Color.black.opacity(0.4)
-                    .ignoresSafeArea()
-                    .transition(.opacity)
-                    .onTapGesture {
-                        hideKeyboard()
-                    }
-
+        Color.clear
+            .sheet(isPresented: Bindable(appState).showPairing) {
                 ConnectionCardView()
                     .environment(appState)
-                    .transition(.scale(scale: 0.92).combined(with: .opacity))
-                    .padding(.horizontal, 24)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(Color(.systemGroupedBackground))
             }
-        }
-        .animation(.spring(response: 0.45, dampingFraction: 0.85), value: shouldShow)
     }
 }
 
@@ -77,15 +64,8 @@ struct ConnectionCardView: View {
     @State private var showToken = false
 
     // Relay pairing fields
-    @State private var relayUrl = "ws://192.168.120.142:8787"
+    @State private var relayUrl = ""
     @State private var pairingCode = ""
-
-    @FocusState private var focusedField: Field?
-
-    private enum Field: Hashable {
-        case gatewayUrl, gatewayToken
-        case relayUrl, relayCode
-    }
 
     private var accent: Color {
         appState.currentVisualTheme.accent
@@ -107,86 +87,77 @@ struct ConnectionCardView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        NavigationStack {
             VStack(spacing: 0) {
-                headerArea
-                    .padding(.top, 32)
-                    .padding(.bottom, 20)
+                ScrollView {
+                    VStack(spacing: 0) { // Changed to 0 to control spacing exactly
+                        // Header
+                        VStack(spacing: 16) {
+                            Image("clawos_svg_logo")
+                                .resizable()
+                                .renderingMode(.template)
+                                .scaledToFit()
+                                .frame(width: 64, height: 64)
+                                .foregroundStyle(accent)
 
-                modePicker
+                            Text("连接 Gateway")
+                                .font(.title2.weight(.bold))
+                        }
+                        .padding(.top, 40)
+                        .padding(.bottom, 32) // Explicit spacing below header
+
+                        modePicker
+                            .padding(.bottom, 40) // Explicitly move form down by adding more space here
+
+                        formArea
+
+                        if let errorMessage {
+                            errorBanner(errorMessage)
+                                .padding(.top, 24)
+                        }
+                    }
                     .padding(.horizontal, 24)
-                    .padding(.bottom, 20)
-
-                formArea
-                    .padding(.horizontal, 24)
-
-                if let errorMessage {
-                    errorBanner(errorMessage)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 16)
+                    .padding(.bottom, 24)
                 }
+                .scrollDismissesKeyboard(.interactively)
 
+                Spacer(minLength: 0)
+
+                // Bottom Actions
                 buttonArea
                     .padding(.horizontal, 24)
-                    .padding(.top, 28)
-                    .padding(.bottom, 12)
+                    .padding(.top, 16)
+                    .padding(.bottom, 32) // Increased bottom padding to avoid hugging the keyboard
             }
-            .padding(.bottom, 20)
-
-            if appState.clawChatManager.hasSavedConnection || !appState.gateways.isEmpty {
-                closeButton
+            .background(Color(.systemGroupedBackground))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if appState.clawChatManager.hasSavedConnection || !appState.gateways.isEmpty {
+                        Button {
+                            appState.showPairing = false
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title3)
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
-        }
-        .background(
-            RoundedRectangle(cornerRadius: 36, style: .continuous)
-                .fill(.regularMaterial)
-        )
-        .adaptiveGlass(in: .rect(cornerRadius: 36))
-        .overlay(
-            RoundedRectangle(cornerRadius: 36, style: .continuous)
-                .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
-                .blendMode(.overlay)
-        )
-        .shadow(color: .black.opacity(0.15), radius: 40, y: 20)
-        .shadow(color: .black.opacity(0.08), radius: 15, y: 8)
-        .onTapGesture { hideKeyboard() }
-        .sheet(isPresented: $showScanner) {
-            QRScannerSheet { parsed in
-                handleScannedLink(parsed)
+            .sheet(isPresented: $showScanner) {
+                QRScannerSheet { parsed in
+                    handleScannedLink(parsed)
+                }
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .clawChatDeepLink)) { notification in
-            if let relay = notification.userInfo?["relay"] as? String,
-               let code = notification.userInfo?["code"] as? String {
-                handleRelayDeepLink(relay, code)
-            } else if let url = notification.userInfo?["gatewayUrl"] as? String,
-                      let token = notification.userInfo?["gatewayToken"] as? String {
-                handleGatewayDeepLink(url, token)
-            }
-        }
-    }
-
-    // MARK: - Header
-
-    private var headerArea: some View {
-        VStack(spacing: 16) {
-            Image("clawos_svg_logo")
-                .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
-                .frame(width: 56, height: 56)
-                .foregroundStyle(accent)
-
-            VStack(spacing: 6) {
-                Text("连接 Gateway")
-                    .font(.title3.weight(.bold))
-
-                Text(selectedMode == .direct
-                     ? "输入 Gateway 地址和 Token"
-                     : "扫描二维码或手动输入配对信息")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .animation(.none, value: selectedMode)
+            .onReceive(NotificationCenter.default.publisher(for: .clawChatDeepLink)) { notification in
+                if let relay = notification.userInfo?["relay"] as? String,
+                   let code = notification.userInfo?["code"] as? String {
+                    handleRelayDeepLink(relay, code)
+                } else if let url = notification.userInfo?["gatewayUrl"] as? String,
+                          let token = notification.userInfo?["gatewayToken"] as? String {
+                    handleGatewayDeepLink(url, token)
+                }
             }
         }
     }
@@ -217,133 +188,82 @@ struct ConnectionCardView: View {
     }
 
     private var gatewayForm: some View {
-        VStack(spacing: 16) {
-            fieldRow(
-                label: "Gateway 地址",
-                placeholder: "wss://gateway.example.com",
-                text: $gatewayUrl,
-                keyboard: .URL,
-                field: .gatewayUrl,
-                isSecure: false
-            )
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Token")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 4)
-
-                HStack {
-                    Group {
-                        if showToken {
-                            TextField("粘贴你的 Gateway Token", text: $gatewayToken)
-                                .textFieldStyle(.plain)
-                        } else {
-                            SecureField("粘贴你的 Gateway Token", text: $gatewayToken)
-                                .textFieldStyle(.plain)
-                        }
-                    }
-                    .font(.system(.body, design: .monospaced))
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .focused($focusedField, equals: .gatewayToken)
-
-                    Button {
-                        showToken.toggle()
-                    } label: {
-                        Image(systemName: showToken ? "eye.slash" : "eye")
-                            .font(.system(size: 15))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
+        VStack(spacing: 0) {
+            TextField("Gateway URL", text: $gatewayUrl)
+                .keyboardType(.URL)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color(.systemBackground).opacity(0.5))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
-                        .blendMode(.overlay)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture { focusedField = .gatewayToken }
+                .frame(height: 54)
+
+            Divider()
+                .padding(.leading, 16)
+
+            HStack {
+                Group {
+                    if showToken {
+                        TextField("Token", text: $gatewayToken)
+                    } else {
+                        SecureField("Token", text: $gatewayToken)
+                    }
+                }
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+
+                Button {
+                    showToken.toggle()
+                } label: {
+                    Image(systemName: showToken ? "eye.slash" : "eye")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
+            .padding(.horizontal, 16)
+            .frame(height: 54)
         }
+        .background(Color(uiColor: .systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5)
+        )
     }
 
     private var relayForm: some View {
-        VStack(spacing: 16) {
-            fieldRow(
-                label: "Relay 地址",
-                placeholder: "wss://relay.clawchat.dev",
-                text: $relayUrl,
-                keyboard: .URL,
-                field: .relayUrl,
-                isSecure: false
-            )
+        VStack(spacing: 0) {
+            TextField("Relay URL", text: $relayUrl)
+                .keyboardType(.URL)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .padding(.horizontal, 16)
+                .frame(height: 54)
 
-            fieldRow(
-                label: "配对码",
-                placeholder: "ABC-123",
-                text: $pairingCode,
-                keyboard: .asciiCapable,
-                field: .relayCode,
-                isSecure: false,
-                monospaced: true
-            )
-            .onChange(of: pairingCode) { _, newValue in
-                let cleaned = newValue.replacingOccurrences(of: "-", with: "")
-                let capped = String(cleaned.prefix(6)).uppercased()
-                if capped.count > 3 {
-                    pairingCode = String(capped.prefix(3)) + "-" + String(capped.dropFirst(3))
-                } else {
-                    pairingCode = capped
+            Divider()
+                .padding(.leading, 16)
+
+            TextField("配对码", text: $pairingCode)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.characters)
+                .padding(.horizontal, 16)
+                .frame(height: 54)
+                .onChange(of: pairingCode) { _, newValue in
+                    let cleaned = newValue.replacingOccurrences(of: "-", with: "")
+                    let capped = String(cleaned.prefix(6)).uppercased()
+                    if capped.count > 3 {
+                        pairingCode = String(capped.prefix(3)) + "-" + String(capped.dropFirst(3))
+                    } else {
+                        pairingCode = capped
+                    }
                 }
-            }
         }
-    }
-
-    private func fieldRow(
-        label: String,
-        placeholder: String,
-        text: Binding<String>,
-        keyboard: UIKeyboardType,
-        field: Field,
-        isSecure: Bool,
-        monospaced: Bool = false
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(label)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .padding(.leading, 4)
-
-            HStack {
-                TextField(placeholder, text: text)
-                    .textFieldStyle(.plain)
-                    .font(monospaced ? .system(.body, design: .monospaced, weight: .semibold) : .body)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(monospaced ? .characters : .never)
-                    .keyboardType(keyboard)
-                    .focused($focusedField, equals: field)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(.systemBackground).opacity(0.5))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
-                    .blendMode(.overlay)
-            )
-            .contentShape(Rectangle())
-            .onTapGesture { focusedField = field }
-        }
+        .background(Color(uiColor: .systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5)
+        )
     }
 
     // MARK: - Actions
@@ -355,19 +275,15 @@ struct ConnectionCardView: View {
                 showScanner = true
             } label: {
                 Image(systemName: "qrcode.viewfinder")
-                    .font(.title2.weight(.semibold))
-                    .frame(width: 52, height: 52)
-                    .foregroundStyle(.white)
+                    .font(.title3)
+                    .frame(width: 50, height: 50)
+                    .foregroundStyle(accent)
                     .background(
-                        accent.opacity(0.8),
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                            .blendMode(.overlay)
+                        Color(.secondarySystemGroupedBackground),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                     )
             }
+            .buttonStyle(.plain)
             .disabled(isConnecting)
 
             Button {
@@ -379,62 +295,33 @@ struct ConnectionCardView: View {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Text(selectedMode == .direct ? "连接" : "开始配对")
-                        .font(.headline.weight(.semibold))
+                        Text("连接")
+                            .font(.headline.weight(.semibold))
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 52)
+                .frame(height: 50)
                 .foregroundStyle(.white)
                 .background(
-                    isFormValid ? accent : Color.gray.opacity(0.4),
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                        .blendMode(.overlay)
+                    isFormValid ? accent : Color.gray.opacity(0.35),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                 )
             }
+            .buttonStyle(.plain)
             .disabled(!isFormValid || isConnecting)
-            .shadow(color: isFormValid ? accent.opacity(0.3) : .clear, radius: 10, y: 4)
         }
-    }
-
-    private var closeButton: some View {
-        Button {
-            hideKeyboard()
-            withAnimation { appState.showPairing = false }
-        } label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.secondary)
-                .frame(width: 32, height: 32)
-                .background(.regularMaterial, in: Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
-                        .blendMode(.overlay)
-                )
-        }
-        .buttonStyle(.plain)
-        .padding(16)
     }
 
     // MARK: - Error
 
     private func errorBanner(_ message: String) -> some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
-            .font(.caption.weight(.medium))
+            .font(.subheadline)
             .foregroundStyle(.red)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.red.opacity(0.2), lineWidth: 1)
-            )
+            .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     // MARK: - Connection Logic
