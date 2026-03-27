@@ -3,10 +3,6 @@ import ClawChatKit
 
 // MARK: - Deep Link Parser
 
-enum PairingDefaults {
-    static let relayUrl = ""
-}
-
 enum PairingDeepLink {
     enum ParsedLink {
         case relay(relay: String, code: String)
@@ -81,7 +77,7 @@ struct ConnectionCardView: View {
     @State private var showToken = false
 
     // Relay pairing fields
-    @State private var relayUrl = PairingDefaults.relayUrl
+    @State private var relayUrl = "ws://192.168.120.142:8787"
     @State private var pairingCode = ""
 
     @FocusState private var focusedField: Field?

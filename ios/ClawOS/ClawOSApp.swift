@@ -2,10 +2,7 @@ import SwiftUI
 import UIKit
 
 enum KeyboardPrewarmer {
-    static let isEnabled = false
-
     static func warmUp() {
-        guard isEnabled else { return }
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let window = windowScene.windows.first else { return }
 
@@ -33,6 +30,7 @@ enum AppLaunchPresentation {
 
 @main
 struct ClawOSApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var appState = AppState()
     @State private var isSplashDone = false
     @State private var showSplash = false
@@ -102,6 +100,10 @@ struct ClawOSApp: App {
             }
             .onOpenURL { url in
                 handleDeepLink(url)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .background else { return }
+                appState.flushAllPendingPersistence()
             }
         }
     }

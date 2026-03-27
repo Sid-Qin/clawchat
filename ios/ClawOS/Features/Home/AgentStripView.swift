@@ -24,7 +24,7 @@ private struct JiggleEffect: ViewModifier {
     }
 
     private func startJiggle() {
-        let base = Double.random(in: 1.5...2.5)
+        let base = Double.random(in: 2.0...3.2)
         withAnimation(.easeInOut(duration: 0.1)) { angle = base }
 
         withAnimation(
@@ -53,7 +53,6 @@ struct AgentStripView: View {
     @State private var itemFrames: [String: CGRect] = [:]
     @State private var armedItemId: String?
     @State private var suppressNextBackgroundTap = false
-    @State private var showAddAgent = false
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -61,8 +60,6 @@ struct AgentStripView: View {
                 ForEach(appState.agentStripItems) { item in
                     stripCell(for: item)
                 }
-
-                addButton
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -83,10 +80,6 @@ struct AgentStripView: View {
                     coordinator.isEditMode = false
                 }
             }
-        }
-        .sheet(isPresented: $showAddAgent) {
-            AgentEditorView()
-                .environment(appState)
         }
     }
 
@@ -271,28 +264,6 @@ struct AgentStripView: View {
             orderedIDs: orderedIDs,
             shiftDistance: shift
         )
-    }
-
-    // MARK: - Add Button
-
-    private var addButton: some View {
-        Button(action: {}) {
-            VStack(spacing: 4) {
-                Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(.quaternary)
-                    .frame(width: 52, height: 52)
-                    .background(.ultraThinMaterial, in: Circle())
-
-                Text("Add")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.quaternary)
-            }
-            .frame(width: 64)
-        }
-        .buttonStyle(.plain)
-        .disabled(true)
-        .opacity(0.4)
     }
 
 }
