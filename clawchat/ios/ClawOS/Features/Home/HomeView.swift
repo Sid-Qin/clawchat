@@ -63,7 +63,9 @@ struct HomeView: View {
         HStack(spacing: 8) {
             gatewayPicker
 
-            Spacer()
+            if !isSearchExpanded {
+                Spacer()
+            }
 
             if isSearchExpanded {
                 HStack(spacing: 6) {
@@ -75,7 +77,6 @@ struct HomeView: View {
                         .focused($isSearchFocused)
                         .textFieldStyle(.plain)
                         .font(.system(size: 14))
-                        .frame(width: 100)
 
                     Button {
                         searchText = ""
@@ -89,6 +90,7 @@ struct HomeView: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity)
                 .frame(height: 36)
                 .adaptiveGlass(in: .capsule)
                 .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
@@ -104,9 +106,6 @@ struct HomeView: View {
                     .onTapGesture {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                             isSearchExpanded = true
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                            isSearchFocused = true
                         }
                     }
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
@@ -126,6 +125,12 @@ struct HomeView: View {
         .padding(.top, 8)
         .padding(.bottom, 4)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isSearchExpanded)
+        .onChange(of: isSearchExpanded) { _, expanded in
+            guard expanded else { return }
+            Task { @MainActor in
+                isSearchFocused = true
+            }
+        }
     }
 
     // MARK: - Gateway Picker
@@ -175,6 +180,10 @@ struct HomeView: View {
                 .foregroundStyle(.primary)
                 .frame(width: 36, height: 36)
                 .adaptiveGlass(in: .circle)
+                .overlay(alignment: .topTrailing) {
+                    connectionDot
+                        .offset(x: 1, y: 1)
+                }
         }
     }
 
@@ -182,7 +191,7 @@ struct HomeView: View {
         let color: Color = switch appState.clawChatManager.linkState {
         case .connected: .green
         case .connecting: .orange
-        default: Color(.systemGray3)
+        default: appState.currentVisualTheme.softStroke
         }
         return Circle()
             .fill(color)
