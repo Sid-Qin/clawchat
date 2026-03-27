@@ -102,16 +102,16 @@ struct SessionListView: View {
                     Image(systemName: "magnifyingglass")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 36, height: 36)
+                        .frame(width: 48, height: 48)
                         .foregroundStyle(theme.softStroke)
 
                     VStack(spacing: 6) {
                         Text("无搜索结果")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.secondary)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
                         Text("试试其他关键词")
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                     }
                 } else {
                     Image(systemName: "bubble.left.and.bubble.right")

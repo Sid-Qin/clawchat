@@ -233,23 +233,33 @@ struct AgentHubView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "person.crop.circle.badge.questionmark")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 44, height: 44)
-                .foregroundStyle(Color(.systemGray3))
-            VStack(spacing: 6) {
-                Text("暂无 Agent")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color(.secondaryLabel))
-                Text("连接 Gateway 后将自动加载 Agent 列表")
+        GeometryReader { geo in
+            VStack(spacing: 16) {
+                Image(systemName: "person.crop.circle.badge.questionmark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 48, height: 48)
+                    .foregroundStyle(Color(.systemGray3))
+                
+                VStack(spacing: 6) {
+                    Text("暂无 Agent")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("连接 Gateway 后将自动加载 Agent 列表")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                
+                // Invisible placeholder to match the layout height of the edit icon in SessionListView
+                Image(systemName: "square.and.pencil")
                     .font(.caption)
-                    .foregroundStyle(Color(.tertiaryLabel))
-                    .multilineTextAlignment(.center)
+                    .opacity(0)
+                    .padding(.top, 4)
             }
+            .frame(maxWidth: .infinity)
+            .position(x: geo.size.width / 2, y: geo.size.height * 0.4)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .offset(y: -40)
+        .frame(height: UIScreen.main.bounds.height * 0.6)
     }
 }
