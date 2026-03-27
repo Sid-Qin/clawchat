@@ -1,9 +1,0 @@
-node_modules
-ios
-android
-.git
-plugin/node_modules
-devlog
-*.db
-*.db-shm
-*.db-wal
