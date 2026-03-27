@@ -76,21 +76,44 @@ struct SessionListView: View {
 
     private var emptyState: some View {
         let isSearching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let theme = appState.currentVisualTheme
         return GeometryReader { geo in
-            VStack(spacing: 12) {
-                Image(systemName: isSearching ? "magnifyingglass" : "bubble.left.and.bubble.right")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 44, height: 44)
-                    .foregroundStyle(Color(.systemGray3))
+            VStack(spacing: 16) {
+                if isSearching {
+                    Image(systemName: "magnifyingglass")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 36, height: 36)
+                        .foregroundStyle(theme.softStroke)
 
-                VStack(spacing: 6) {
-                    Text(isSearching ? "无搜索结果" : "暂无会话")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Color(.secondaryLabel))
-                    Text(isSearching ? "试试其他关键词" : "开始一段新的对话")
+                    VStack(spacing: 6) {
+                        Text("无搜索结果")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        Text("试试其他关键词")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                } else {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 48, height: 48)
+                        .foregroundStyle(theme.accent.opacity(0.5))
+
+                    VStack(spacing: 6) {
+                        Text("暂无会话")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                        Text("新建一个会话开始聊天")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Image(systemName: "square.and.pencil")
                         .font(.caption)
-                        .foregroundStyle(Color(.tertiaryLabel))
+                        .foregroundStyle(theme.accent.opacity(0.4))
+                        .padding(.top, 4)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -232,7 +255,7 @@ struct SessionRowContainer: View {
 
     private var foregroundRow: some View {
         SessionRowView(session: session)
-            .background(Color(.systemBackground).opacity(0.001))
+            .background(appState.currentVisualTheme.rowFill.opacity(0.001))
             .contentShape(Rectangle())
             .offset(x: offset)
             .highPriorityGesture(swipeGesture)
@@ -453,7 +476,7 @@ struct SessionPreviewView: View {
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(isUser ? theme.accent : Color(.systemGray5))
+                        .fill(isUser ? theme.accent : theme.softFill)
                 )
 
             if !isUser { Spacer(minLength: 48) }
@@ -487,9 +510,16 @@ struct SessionRowView: View {
         appState.agent(for: session.agentId)
     }
 
+    private var theme: AppVisualTheme { appState.currentVisualTheme }
+
     var body: some View {
         HStack(spacing: 12) {
-            agentAvatar(agent, size: 40)
+            AgentAvatarView(
+                agentId: agent?.id,
+                avatar: agent?.avatar,
+                theme: theme,
+                size: 40
+            )
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
@@ -525,31 +555,21 @@ struct SessionRowView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 6)
                     .frame(minWidth: 20, minHeight: 20)
-                    .background(Color(.label), in: Capsule())
+                    .background(theme.accent, in: Capsule())
             }
         }
         .padding(.horizontal, AppTheme.Spacing.lg)
         .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                .fill(theme.rowFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
+                        .stroke(theme.rowStroke, lineWidth: 0.5)
+                )
+        )
+        .padding(.horizontal, AppTheme.Spacing.sm)
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
-    }
-
-    private func agentAvatar(_ agent: Agent?, size: CGFloat) -> some View {
-        Group {
-            if let agentId = agent?.id, let custom = AvatarStorage.load(for: agentId) {
-                Image(uiImage: custom)
-                    .resizable()
-                    .scaledToFill()
-            } else if let avatar = agent?.avatar, !avatar.isEmpty, UIImage(named: avatar) != nil {
-                Image(avatar)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Image("default_agent_avatar")
-                    .resizable()
-                    .scaledToFill()
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
     }
 }
