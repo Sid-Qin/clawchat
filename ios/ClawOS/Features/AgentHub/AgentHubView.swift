@@ -2,7 +2,6 @@ import SwiftUI
 
 enum AgentHubHeaderChrome {
     static let showsTitle = false
-    static let controlDiameter: CGFloat = 40
     static let settingsUsesLiquidGlass = true
 }
 
@@ -92,8 +91,8 @@ struct AgentHubView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, AppTheme.Spacing.xl)
-        .padding(.top, 16)
-        .padding(.bottom, 8)
+        .padding(.top, AppTheme.Chrome.headerTopInset)
+        .padding(.bottom, AppTheme.Chrome.headerBottomInset)
     }
 
     private var gatewayPicker: some View {
@@ -138,6 +137,10 @@ struct AgentHubView: View {
             }
         } label: {
             headerControlIcon(systemName: currentGwIcon)
+                .overlay(alignment: .topTrailing) {
+                    connectionDot
+                        .offset(x: 0, y: 0)
+                }
         }
     }
 
@@ -146,22 +149,22 @@ struct AgentHubView: View {
             .font(.system(size: 16, weight: .medium))
             .foregroundStyle(.primary)
             .frame(
-                width: AgentHubHeaderChrome.controlDiameter,
-                height: AgentHubHeaderChrome.controlDiameter
+                width: AppTheme.Chrome.controlDiameter,
+                height: AppTheme.Chrome.controlDiameter
             )
             .contentShape(Circle())
             .adaptiveGlass(in: .circle, interactive: AgentHubHeaderChrome.settingsUsesLiquidGlass)
     }
 
-    private var gwStatusDot: some View {
-        let color: Color = switch appState.currentGateway?.status {
-        case .online: .green
-        case .error: .red
-        default: Color(.systemGray3)
+    private var connectionDot: some View {
+        let color: Color = switch appState.clawChatManager.linkState {
+        case .connected: .green
+        case .connecting: .orange
+        default: appState.currentVisualTheme.softStroke
         }
         return Circle()
             .fill(color)
-            .frame(width: 7, height: 7)
+            .frame(width: 8, height: 8)
     }
 
     private var currentGwIcon: String {
@@ -234,32 +237,34 @@ struct AgentHubView: View {
 
     private var emptyState: some View {
         GeometryReader { geo in
-            VStack(spacing: 16) {
-                Image(systemName: "person.crop.circle.badge.questionmark")
+            VStack(spacing: AppTheme.EmptyState.stackSpacing) {
+                Image("clawos_svg_logo")
                     .resizable()
+                    .renderingMode(.template)
                     .scaledToFit()
-                    .frame(width: 48, height: 48)
-                    .foregroundStyle(Color(.systemGray3))
+                    .frame(
+                        width: AppTheme.EmptyState.iconSize,
+                        height: AppTheme.EmptyState.iconSize
+                    )
+                    .foregroundStyle(Color(.systemGray4))
                 
-                VStack(spacing: 6) {
+                VStack(spacing: AppTheme.EmptyState.textSpacing) {
                     Text("暂无 Agent")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .font(.headline)
+                        .foregroundStyle(Color(.secondaryLabel))
                     Text("连接 Gateway 后将自动加载 Agent 列表")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.subheadline)
+                        .foregroundStyle(Color(.tertiaryLabel))
                         .multilineTextAlignment(.center)
                 }
-                
-                // Invisible placeholder to match the layout height of the edit icon in SessionListView
-                Image(systemName: "square.and.pencil")
-                    .font(.caption)
-                    .opacity(0)
-                    .padding(.top, 4)
             }
             .frame(maxWidth: .infinity)
-            .position(x: geo.size.width / 2, y: geo.size.height * 0.4)
+            .position(
+                x: geo.size.width / 2,
+                y: geo.size.height * AppTheme.EmptyState.contentAnchorRatio
+                    + AppTheme.EmptyState.agentHubVerticalCompensation
+            )
         }
-        .frame(height: UIScreen.main.bounds.height * 0.6)
+        .frame(height: UIScreen.main.bounds.height * AppTheme.EmptyState.frameHeightRatio)
     }
 }

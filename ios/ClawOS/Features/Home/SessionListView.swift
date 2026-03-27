@@ -95,50 +95,54 @@ struct SessionListView: View {
 
     private var emptyState: some View {
         let isSearching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let theme = appState.currentVisualTheme
         return GeometryReader { geo in
-            VStack(spacing: 16) {
+            VStack(spacing: AppTheme.EmptyState.stackSpacing) {
                 if isSearching {
                     Image(systemName: "magnifyingglass")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 48, height: 48)
-                        .foregroundStyle(theme.softStroke)
+                        .frame(
+                            width: AppTheme.EmptyState.iconSize,
+                            height: AppTheme.EmptyState.iconSize
+                        )
+                        .foregroundStyle(Color(.systemGray4))
 
-                    VStack(spacing: 6) {
+                    VStack(spacing: AppTheme.EmptyState.textSpacing) {
                         Text("无搜索结果")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
+                            .font(.headline)
+                            .foregroundStyle(Color(.secondaryLabel))
                         Text("试试其他关键词")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                            .foregroundStyle(Color(.tertiaryLabel))
                     }
                 } else {
-                    Image(systemName: "bubble.left.and.bubble.right")
+                    Image("clawos_svg_logo")
                         .resizable()
+                        .renderingMode(.template)
                         .scaledToFit()
-                        .frame(width: 48, height: 48)
-                        .foregroundStyle(theme.accent.opacity(0.5))
+                        .frame(
+                            width: AppTheme.EmptyState.iconSize,
+                            height: AppTheme.EmptyState.iconSize
+                        )
+                        .foregroundStyle(Color(.systemGray4))
 
-                    VStack(spacing: 6) {
+                    VStack(spacing: AppTheme.EmptyState.textSpacing) {
                         Text("暂无会话")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
+                            .font(.headline)
+                            .foregroundStyle(Color(.secondaryLabel))
                         Text("新建一个会话开始聊天")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                            .foregroundStyle(Color(.tertiaryLabel))
                     }
-
-                    Image(systemName: "square.and.pencil")
-                        .font(.caption)
-                        .foregroundStyle(theme.accent.opacity(0.4))
-                        .padding(.top, 4)
                 }
             }
             .frame(maxWidth: .infinity)
-            .position(x: geo.size.width / 2, y: geo.size.height * 0.4)
+            .position(
+                x: geo.size.width / 2,
+                y: geo.size.height * AppTheme.EmptyState.contentAnchorRatio
+            )
         }
-        .frame(height: UIScreen.main.bounds.height * 0.6)
+        .frame(height: UIScreen.main.bounds.height * AppTheme.EmptyState.frameHeightRatio)
     }
 }
 

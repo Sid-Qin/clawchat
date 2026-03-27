@@ -64,7 +64,7 @@ struct ConnectionCardView: View {
     @State private var showToken = false
 
     // Relay pairing fields
-    @State private var relayUrl = ""
+    @State private var relayUrl = PairingDefaults.relayUrl
     @State private var pairingCode = ""
 
     private var accent: Color {
@@ -224,9 +224,9 @@ struct ConnectionCardView: View {
             .frame(height: 54)
         }
         .background(Color(uiColor: .systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5)
         )
     }
@@ -259,9 +259,9 @@ struct ConnectionCardView: View {
                 }
         }
         .background(Color(uiColor: .systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5)
         )
     }
@@ -388,6 +388,10 @@ struct ConnectionCardView: View {
             handleGatewayDeepLink(url, token)
         }
     }
+}
+
+enum PairingDefaults {
+    static let relayUrl = ""
 }
 
 // MARK: - QR Scanner Sheet
