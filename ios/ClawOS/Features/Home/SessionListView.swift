@@ -114,8 +114,9 @@ struct SessionListView: View {
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    Image(systemName: "bubble.left.and.bubble.right")
+                    Image("clawos_svg_logo")
                         .resizable()
+                        .renderingMode(.template)
                         .scaledToFit()
                         .frame(width: 48, height: 48)
                         .foregroundStyle(theme.accent.opacity(0.5))
@@ -128,11 +129,6 @@ struct SessionListView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-
-                    Image(systemName: "square.and.pencil")
-                        .font(.caption)
-                        .foregroundStyle(theme.accent.opacity(0.4))
-                        .padding(.top, 4)
                 }
             }
             .frame(maxWidth: .infinity)

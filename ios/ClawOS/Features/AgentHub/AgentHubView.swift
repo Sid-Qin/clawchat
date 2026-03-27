@@ -235,11 +235,12 @@ struct AgentHubView: View {
     private var emptyState: some View {
         GeometryReader { geo in
             VStack(spacing: 16) {
-                Image(systemName: "person.crop.circle.badge.questionmark")
+                Image("clawos_svg_logo")
                     .resizable()
+                    .renderingMode(.template)
                     .scaledToFit()
                     .frame(width: 48, height: 48)
-                    .foregroundStyle(Color(.systemGray3))
+                    .foregroundStyle(accent.opacity(0.5))
                 
                 VStack(spacing: 6) {
                     Text("暂无 Agent")
@@ -250,12 +251,6 @@ struct AgentHubView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
-                
-                // Invisible placeholder to match the layout height of the edit icon in SessionListView
-                Image(systemName: "square.and.pencil")
-                    .font(.caption)
-                    .opacity(0)
-                    .padding(.top, 4)
             }
             .frame(maxWidth: .infinity)
             .position(x: geo.size.width / 2, y: geo.size.height * 0.4)
