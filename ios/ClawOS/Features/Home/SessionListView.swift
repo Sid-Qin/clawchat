@@ -95,7 +95,6 @@ struct SessionListView: View {
 
     private var emptyState: some View {
         let isSearching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let theme = appState.currentVisualTheme
         return GeometryReader { geo in
             VStack(spacing: 20) {
                 if isSearching {
