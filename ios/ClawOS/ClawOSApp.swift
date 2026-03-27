@@ -38,6 +38,7 @@ struct ClawOSApp: App {
     @State private var isSplashDone = false
     @State private var showSplash = false
     @State private var showLogin: Bool?
+    @State private var shouldPromptForPairingAfterLinkStart = false
     @AppStorage("clawos_logged_in_v4") private var hasLoggedIn = false
 
     var body: some Scene {
@@ -98,7 +99,22 @@ struct ClawOSApp: App {
             }
             .onChange(of: appState.clawChatManager.linkState) { _, newState in
                 if case .connected = newState {
+                    shouldPromptForPairingAfterLinkStart = false
                     withAnimation { appState.showPairing = false }
+                    return
+                }
+
+                guard isSplashDone, showLogin != true else { return }
+                if PairingPresentationBehavior.shouldAutoPresent(for: newState) {
+                    withAnimation { appState.showPairing = true }
+                }
+            }
+            .onChange(of: isSplashDone) { _, done in
+                guard done else { return }
+                if shouldPromptForPairingAfterLinkStart {
+                    presentPairingAfterLinkStartIfNeeded()
+                } else {
+                    checkPairingState()
                 }
             }
             .onOpenURL { url in
@@ -113,6 +129,7 @@ struct ClawOSApp: App {
 
     private func handleLoginComplete() {
         hasLoggedIn = true
+        shouldPromptForPairingAfterLinkStart = true
 
         showSplash = true
 
@@ -133,13 +150,25 @@ struct ClawOSApp: App {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 KeyboardPrewarmer.warmUp()
-                checkPairingState()
             }
         }
     }
 
     private func checkPairingState() {
-        if appState.clawChatManager.linkState == .unpaired {
+        if PairingPresentationBehavior.shouldAutoPresent(for: appState.clawChatManager.linkState) {
+            withAnimation { appState.showPairing = true }
+        }
+    }
+
+    private func presentPairingAfterLinkStartIfNeeded() {
+        guard shouldPromptForPairingAfterLinkStart else { return }
+        defer { shouldPromptForPairingAfterLinkStart = false }
+
+        if PairingPresentationBehavior.shouldPresentSheet(
+            for: appState.clawChatManager.linkState,
+            isSplashDone: isSplashDone,
+            isLoginVisible: showLogin == true
+        ) {
             withAnimation { appState.showPairing = true }
         }
     }

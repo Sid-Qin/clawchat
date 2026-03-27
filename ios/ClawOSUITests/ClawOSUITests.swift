@@ -32,6 +32,19 @@ final class ClawOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testPairingSheetAutoPresentsAfterLinkStart() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let linkStartButton = app.buttons["LINK START"]
+        XCTAssertTrue(linkStartButton.waitForExistence(timeout: 5))
+        linkStartButton.tap()
+
+        let pairingTitle = app.staticTexts["连接 Gateway"]
+        XCTAssertTrue(pairingTitle.waitForExistence(timeout: 4))
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

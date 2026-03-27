@@ -31,6 +31,46 @@ enum PairingDeepLink {
     }
 }
 
+enum PairingPresentationBehavior {
+    static func shouldAutoPresent(for linkState: ClawChatManager.LinkState) -> Bool {
+        switch linkState {
+        case .unpaired, .disconnected, .error:
+            return true
+        case .connecting, .connected:
+            return false
+        }
+    }
+
+    static func shouldPresentSheet(
+        for linkState: ClawChatManager.LinkState,
+        isSplashDone: Bool,
+        isLoginVisible: Bool
+    ) -> Bool {
+        guard isSplashDone, !isLoginVisible else { return false }
+        switch linkState {
+        case .connected:
+            return false
+        case .unpaired, .connecting, .disconnected, .error:
+            return true
+        }
+    }
+
+    static func showsDismissButton(hasGatewayContext: Bool) -> Bool {
+        hasGatewayContext
+    }
+}
+
+enum PairingSheetLayoutMetrics {
+    static let logoSize: CGFloat = 64
+    static let headerSpacing: CGFloat = 16
+    static let headerTopPadding: CGFloat = 40
+    static let headerBottomPadding: CGFloat = 32
+    static let modePickerBottomPadding: CGFloat = 45
+    static let contentHorizontalPadding: CGFloat = 24
+    static let actionRowTopPadding: CGFloat = 60
+    static let actionRowBottomPadding: CGFloat = 20
+}
+
 // MARK: - Floating Card Overlay (used at app root)
 
 struct PairingOverlay: View {
@@ -86,54 +126,55 @@ struct ConnectionCardView: View {
         }
     }
 
+    private var showsDismissButton: Bool {
+        PairingPresentationBehavior.showsDismissButton(
+            hasGatewayContext: !appState.gateways.isEmpty
+        )
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                ScrollView {
-                    VStack(spacing: 0) { // Changed to 0 to control spacing exactly
-                        // Header
-                        VStack(spacing: 16) {
-                            Image("clawos_svg_logo")
-                                .resizable()
-                                .renderingMode(.template)
-                                .scaledToFit()
-                                .frame(width: 64, height: 64)
-                                .foregroundStyle(accent)
+            ScrollView {
+                VStack(spacing: 0) {
+                    VStack(spacing: PairingSheetLayoutMetrics.headerSpacing) {
+                        Image("clawos_svg_logo")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(
+                                width: PairingSheetLayoutMetrics.logoSize,
+                                height: PairingSheetLayoutMetrics.logoSize
+                            )
+                            .foregroundStyle(accent)
 
-                            Text("连接 Gateway")
-                                .font(.title2.weight(.bold))
-                        }
-                        .padding(.top, 40)
-                        .padding(.bottom, 32) // Explicit spacing below header
-
-                        modePicker
-                            .padding(.bottom, 40) // Explicitly move form down by adding more space here
-
-                        formArea
-
-                        if let errorMessage {
-                            errorBanner(errorMessage)
-                                .padding(.top, 24)
-                        }
+                        Text("连接 Gateway")
+                            .font(.title2.weight(.bold))
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
+                    .padding(.top, PairingSheetLayoutMetrics.headerTopPadding)
+                    .padding(.bottom, PairingSheetLayoutMetrics.headerBottomPadding)
+
+                    modePicker
+                        .padding(.bottom, PairingSheetLayoutMetrics.modePickerBottomPadding)
+
+                    formArea
+
+                    if let errorMessage {
+                        errorBanner(errorMessage)
+                            .padding(.top, 24)
+                    }
+
+                    buttonArea
+                        .padding(.top, PairingSheetLayoutMetrics.actionRowTopPadding)
+                        .padding(.bottom, PairingSheetLayoutMetrics.actionRowBottomPadding)
                 }
-                .scrollDismissesKeyboard(.interactively)
-
-                Spacer(minLength: 0)
-
-                // Bottom Actions
-                buttonArea
-                    .padding(.horizontal, 24)
-                    .padding(.top, 16)
-                    .padding(.bottom, 32) // Increased bottom padding to avoid hugging the keyboard
+                .padding(.horizontal, PairingSheetLayoutMetrics.contentHorizontalPadding)
             }
+            .scrollDismissesKeyboard(.interactively)
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if appState.clawChatManager.hasSavedConnection || !appState.gateways.isEmpty {
+                    if showsDismissButton {
                         Button {
                             appState.showPairing = false
                         } label: {

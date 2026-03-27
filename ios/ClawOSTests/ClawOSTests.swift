@@ -392,12 +392,12 @@ struct ClawOSTests {
         #expect(elevation.shadowRadius == 16)
     }
 
-    @Test("冷启动已登录用户跳过登录并显示开屏")
-    func appLaunchSkipsLoginWhenAlreadyAuthenticated() {
+    @Test("冷启动已登录用户仍先展示 LINK START 首屏")
+    func appLaunchShowsLinkStartScreenWhenAlreadyAuthenticated() {
         let state = AppLaunchPresentation.initialVisibility(hasLoggedIn: true)
 
-        #expect(state.showLogin == false)
-        #expect(state.showSplash == true)
+        #expect(state.showLogin == true)
+        #expect(state.showSplash == false)
         #expect(state.isSplashDone == false)
     }
 
@@ -408,6 +408,98 @@ struct ClawOSTests {
         #expect(state.showLogin == true)
         #expect(state.showSplash == false)
         #expect(state.isSplashDone == false)
+    }
+
+    @Test("LINK START 后 splash 结束时只要尚未 connected 就展示配对页")
+    func pairingSheetPresentsUntilConnectedAfterLinkStart() {
+        #expect(
+            PairingPresentationBehavior.shouldPresentSheet(
+                for: .unpaired,
+                isSplashDone: true,
+                isLoginVisible: false
+            )
+        )
+        #expect(
+            PairingPresentationBehavior.shouldPresentSheet(
+                for: .connecting,
+                isSplashDone: true,
+                isLoginVisible: false
+            )
+        )
+        #expect(
+            PairingPresentationBehavior.shouldPresentSheet(
+                for: .disconnected,
+                isSplashDone: true,
+                isLoginVisible: false
+            )
+        )
+        #expect(
+            PairingPresentationBehavior.shouldPresentSheet(
+                for: .error("timeout"),
+                isSplashDone: true,
+                isLoginVisible: false
+            )
+        )
+        #expect(
+            PairingPresentationBehavior.shouldPresentSheet(
+                for: .connected,
+                isSplashDone: true,
+                isLoginVisible: false
+            ) == false
+        )
+    }
+
+    @Test("开屏结束后重连晚于 splash 失败时仍会自动展示配对页")
+    func pairingSheetAutoPresentsAfterLateReconnectFailure() {
+        #expect(
+            PairingPresentationBehavior.shouldPresentSheet(
+                for: .disconnected,
+                isSplashDone: true,
+                isLoginVisible: false
+            )
+        )
+        #expect(
+            PairingPresentationBehavior.shouldPresentSheet(
+                for: .error("timeout"),
+                isSplashDone: true,
+                isLoginVisible: false
+            )
+        )
+        #expect(
+            PairingPresentationBehavior.shouldPresentSheet(
+                for: .disconnected,
+                isSplashDone: false,
+                isLoginVisible: false
+            ) == false
+        )
+        #expect(
+            PairingPresentationBehavior.shouldPresentSheet(
+                for: .disconnected,
+                isSplashDone: true,
+                isLoginVisible: true
+            ) == false
+        )
+    }
+
+    @Test("没有可用 gateway 时配对页不显示关闭按钮")
+    func pairingSheetCloseButtonRequiresGatewayContext() {
+        #expect(PairingPresentationBehavior.showsDismissButton(hasGatewayContext: false) == false)
+        #expect(PairingPresentationBehavior.showsDismissButton(hasGatewayContext: true))
+    }
+
+    @Test("配对页按钮和输入框同层滚动无独立布局状态")
+    func pairingSheetButtonsShareContentLayer() {
+        #expect(PairingSheetLayoutMetrics.actionRowTopPadding == 60)
+        #expect(PairingSheetLayoutMetrics.actionRowBottomPadding == 20)
+    }
+
+    @Test("配对页头部沿用 release08 节奏")
+    func pairingSheetHeaderMetricsStayAligned() {
+        #expect(PairingSheetLayoutMetrics.logoSize == 64)
+        #expect(PairingSheetLayoutMetrics.headerSpacing == 16)
+        #expect(PairingSheetLayoutMetrics.headerTopPadding == 40)
+        #expect(PairingSheetLayoutMetrics.headerBottomPadding == 32)
+        #expect(PairingSheetLayoutMetrics.modePickerBottomPadding == 45)
     }
 
     @Test("Relay 配对默认地址为空")
