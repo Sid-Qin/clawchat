@@ -1,69 +1,112 @@
-# ClawOS-Swift
+# ClawChat
 
-Native iOS client for [OpenClaw](https://github.com/openclaw/openclaw) — built with Swift & SwiftUI, designed around Apple's Liquid Glass UI paradigm.
+First-party messaging apps for [OpenClaw](https://github.com/openclaw/openclaw). Talk to your AI agents from any device — no third-party chat platform required.
+
+## How It Works
+
+ClawChat follows the same outbound-only pattern as other OpenClaw channels (Telegram, Discord, Slack). Both your gateway and your phone connect **outbound** to a shared relay. No public IP or port forwarding needed.
+
+```
+Your Phone ──> ClawChat Relay <── Your OpenClaw Gateway (behind NAT)
+```
+
+## Installation
+
+### 1. Install the plugin
+
+```bash
+# Build first
+cd plugin && bun install && bun run build && cd ..
+
+# Install into OpenClaw
+openclaw plugins install ./plugin
+```
+
+Or copy directly to the user plugin directory:
+
+```bash
+cp -r plugin ~/.openclaw/extensions/clawchat
+```
+
+### 2. Configure
+
+Add to `~/.openclaw/openclaw.yaml`:
+
+```yaml
+channels:
+  clawchat:
+    accounts:
+      default:
+        token: <your-relay-gateway-token>
+        # Optional — defaults shown:
+        # relay: wss://clawchat-production-db31.up.railway.app
+        # session: clawchat
+```
+
+The `token` is your gateway registration token for the relay. Keep it secret.
+
+### 3. Restart OpenClaw
+
+The plugin starts automatically with the gateway. Check logs for:
+
+```
+[clawchat] Starting gateway accountId=default relay=wss://...
+[clawchat] Registered. Paired devices: 0
+```
+
+### 4. Pair your phone
+
+In any OpenClaw chat (webchat, Telegram, etc.), run:
+
+```
+/clawchat pair
+```
+
+This calls the relay and returns a 6-character pairing code and relay URL:
+
+```
+ClawChat Pairing Code
+
+ABC-123
+
+Relay: wss://clawchat-production-db31.up.railway.app
+Expires: 14:32:00
+
+Open ClawChat app → Settings → Pair Gateway,
+enter the relay URL and code above.
+```
+
+Open the ClawChat iOS or Android app, go to **Settings → Pair Gateway**, enter the relay URL and code. Done.
+
+## Project Structure
+
+| Directory | Description |
+|-----------|-------------|
+| `plugin/` | OpenClaw channel plugin — installs into OpenClaw gateway |
+| `ios/` | Native iOS app (SwiftUI, iOS 17+) |
+| `android/` | Native Android app (Jetpack Compose, API 26+) |
+| `service/` | ClawChat relay service (Bun) |
+| `cli/` | CLI reference client |
+| `packages/` | Shared protocol types (TypeScript) |
+| `openspec/` | Architecture specs and wire protocol |
+
+## Self-Hosting the Relay
+
+```bash
+cd service && bun install && bun dev
+```
+
+Then set `relay: ws://localhost:3000` in your plugin config.
 
 ## Features
 
-- **Liquid Glass UI** — Full embrace of iOS 26's glass material system across all views, search bars, buttons, and navigation elements
-- **Multi-Agent Management** — Gesture-driven floating sidebar for switching between local and cloud agents across multiple gateways
-- **Chat Interface** — Native iOS conversation experience with popover model switching, glass-effect input bar, and themed empty states
-- **Visual Theming** — Global theme system (EVA-00 零号机 / EVA-01 初号机) affecting tab bar, backgrounds, banners, toggle tints, and dynamic app icons
-- **Dashboard** — Token usage tracking with themed cards, system diagnostics, and configuration management
-- **Agent Profiles** — Quick info cards for model, gateway, skills, and system prompt with one-tap agent switching
-- **Settings** — Native `Form`-based settings with NavigationLink drill-down for models, themes, skills, and core files
-- **Splash Screen** — Animated launch screen with rotating hexagonal claw icon
-
-## Architecture
-
-```
-ClawOS/
-├── Core/
-│   ├── Models/          # Agent, Gateway, Session, Message, Skill
-│   ├── Services/        # Agent, Chat, Gateway, TokenUsage services
-│   └── Theme/           # AppTheme, AppVisualTheme (token-based theming)
-├── Features/
-│   ├── Home/            # SessionListView, HomeView, AgentSidebarView
-│   ├── Chat/            # ChatView, MessageBubbleView, ModelSwitcherBar
-│   ├── Dashboard/       # DashboardView with token usage & diagnostics
-│   ├── Profile/         # AgentProfileView with quick info cards
-│   ├── Settings/        # SettingsView, ThemeSelectionView, ModelSelectionView
-│   ├── Splash/          # Animated splash screen
-│   └── AgentEditor/     # Agent configuration editor
-└── UI/
-    ├── Components/      # GlassCard, StatusIndicator, TokenProgressBar
-    └── Extensions/      # View+Glass
-```
-
-## Tech Stack
-
-- **Language**: Swift 6
-- **UI Framework**: SwiftUI (iOS 26+)
-- **Architecture**: MVVM + `@Observable`
-- **State Management**: `@Observable`, `@Environment`, `@AppStorage`
-- **Navigation**: `NavigationStack` + `TabView`
-- **Theming**: Token-based `AppVisualTheme` with ambient layers and dynamic app icons
-
-## Requirements
-
-- Xcode 26+
-- iOS 26.0+
-- macOS 26+
-
-## Getting Started
-
-```bash
-git clone https://github.com/ottin4ttc/ClawOS-Swift.git
-cd ClawOS-Swift/ClawOS
-open ClawOS.xcodeproj
-```
-
-Build and run on an iOS 26 simulator or device.
-
-## Related Projects
-
-- [OpenClaw](https://github.com/openclaw/openclaw) — Your own personal AI assistant. Any OS. Any Platform.
-- [ClawChat](https://github.com/ottin4ttc/clawchat) — First-party messaging apps for OpenClaw
-- [TalentClaw Platform](https://github.com/ottin4ttc/talent-claw-platform) — Agent-to-Agent collaboration marketplace
+- Streaming text with real-time token display
+- Thinking / reasoning blocks (collapsible)
+- Tool execution progress
+- Approval dialogs
+- No public IP required — gateway stays behind NAT
+- Multi-gateway support
+- Self-hostable relay
 
 ## License
 
