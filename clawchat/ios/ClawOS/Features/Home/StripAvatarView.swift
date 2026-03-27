@@ -64,9 +64,9 @@ struct StripAvatarView: View {
     private var selectionRing: some View {
         if isSelected && !isMergeCandidate {
             Circle()
-                .stroke(accent, lineWidth: 1.5)
+                .stroke(accent, lineWidth: 2)
                 .frame(width: Self.avatarSize + 6, height: Self.avatarSize + 6)
-                .shadow(color: accent.opacity(0.3), radius: 4, y: 1)
+                .shadow(color: accent.opacity(0.4), radius: 5, y: 1)
         }
     }
 
@@ -106,12 +106,13 @@ struct StripAvatarView: View {
 
     private func groupAvatarContent(group: AgentGroup) -> some View {
         let visibleIds = Array(group.agentIds.prefix(4))
+        let memberCount = group.agentIds.count
         return ZStack {
             Circle()
-                .fill(.ultraThinMaterial)
+                .fill(appState.currentVisualTheme.softFill)
                 .frame(width: Self.avatarSize, height: Self.avatarSize)
                 .overlay(
-                    Circle().stroke(Color.secondary.opacity(0.18), lineWidth: 0.5)
+                    Circle().stroke(appState.currentVisualTheme.softStroke.opacity(0.3), lineWidth: 0.5)
                 )
 
             let gridSize = Self.avatarSize - 8
@@ -129,6 +130,16 @@ struct StripAvatarView: View {
                 }
             }
             .frame(width: gridSize, height: gridSize)
+
+            if memberCount > 1 {
+                Text("\(memberCount)")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 16, height: 16)
+                    .background(accent.opacity(0.85), in: Circle())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .offset(x: -2, y: -2)
+            }
 
             let totalUnread = group.agentIds.compactMap { appState.agent(for: $0)?.unreadCount }.reduce(0, +)
             if totalUnread > 0 {
@@ -182,7 +193,7 @@ struct StripAvatarView: View {
         case .online: .green
         case .idle: .orange
         case .dnd: .red
-        case .offline: Color(.systemGray3)
+        case .offline: appState.currentVisualTheme.softStroke
         }
         return Circle()
             .fill(color)
