@@ -234,21 +234,21 @@ struct AgentHubView: View {
 
     private var emptyState: some View {
         GeometryReader { geo in
-            VStack(spacing: 16) {
+            VStack(spacing: 20) {
                 Image("clawos_svg_logo")
                     .resizable()
                     .renderingMode(.template)
                     .scaledToFit()
-                    .frame(width: 48, height: 48)
-                    .foregroundStyle(accent.opacity(0.5))
+                    .frame(width: 56, height: 56)
+                    .foregroundStyle(Color(.systemGray4))
                 
-                VStack(spacing: 6) {
+                VStack(spacing: 8) {
                     Text("暂无 Agent")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .font(.headline)
+                        .foregroundStyle(Color(.secondaryLabel))
                     Text("连接 Gateway 后将自动加载 Agent 列表")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.subheadline)
+                        .foregroundStyle(Color(.tertiaryLabel))
                         .multilineTextAlignment(.center)
                 }
             }
