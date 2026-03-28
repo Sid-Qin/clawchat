@@ -9,6 +9,7 @@ import Testing
 import Foundation
 import CoreGraphics
 import UIKit
+import SwiftUI
 @testable import ClawOS
 
 @MainActor
@@ -415,9 +416,9 @@ struct ClawOSTests {
         #expect(PairingDefaults.relayUrl.isEmpty)
     }
 
-    @Test("开屏结束后不再预热键盘避免闪烁")
-    func splashCompletionDoesNotPrewarmKeyboard() {
-        #expect(KeyboardPrewarmer.isEnabled == false)
+    @Test("键盘预热已启用以消除首次聚焦延迟")
+    func keyboardPrewarmerIsEnabled() {
+        #expect(KeyboardPrewarmer.isEnabled == true)
     }
 
     @Test("东京行程故事文案不包含乱码替代字符")

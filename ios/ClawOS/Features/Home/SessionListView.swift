@@ -41,14 +41,6 @@ struct SessionListView: View {
             sessionList
         }
         .contentShape(Rectangle())
-        .background {
-            LinearGradient(
-                colors: [appState.currentVisualTheme.pageGradientTop, appState.currentVisualTheme.pageGradientBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        }
     }
 
     // MARK: - List

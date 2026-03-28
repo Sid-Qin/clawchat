@@ -58,9 +58,9 @@ struct AgentHubView: View {
                         .resizable()
                         .scaledToFill()
                         .opacity(appState.currentVisualTheme.ambientOpacity)
-                        .blur(radius: 0.5)
                 }
             }
+            .drawingGroup()
             .ignoresSafeArea()
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -84,8 +84,12 @@ struct AgentHubView: View {
 
             Spacer()
 
-            NavigationLink {
-                SettingsView()
+            Button {
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.impactOccurred()
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    appState.showSettingsDrawer = true
+                }
             } label: {
                 headerControlIcon(systemName: "gearshape")
             }

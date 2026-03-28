@@ -2,18 +2,27 @@ import SwiftUI
 import UIKit
 
 enum KeyboardPrewarmer {
-    static func warmUp() {
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = windowScene.windows.first else { return }
+    static let isEnabled = true
 
-        let field = UITextField(frame: CGRect(x: 0, y: -200, width: 1, height: 1))
+    static func warmUp() {
+        guard isEnabled else { return }
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+
+        let prewarmWindow = UIWindow(windowScene: windowScene)
+        prewarmWindow.windowLevel = .init(rawValue: -1)
+        prewarmWindow.frame = CGRect(x: 0, y: -200, width: 1, height: 1)
+
+        let field = UITextField()
         field.autocorrectionType = .no
-        window.addSubview(field)
+        prewarmWindow.rootViewController = UIViewController()
+        prewarmWindow.rootViewController?.view.addSubview(field)
+        prewarmWindow.isHidden = false
+
         field.becomeFirstResponder()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             field.resignFirstResponder()
-            field.removeFromSuperview()
+            prewarmWindow.isHidden = true
         }
     }
 }
@@ -42,8 +51,45 @@ struct ClawOSApp: App {
             ZStack {
                 ContentView()
                     .environment(appState)
-                    .allowsHitTesting(!appState.showPairing)
+                    .allowsHitTesting(!appState.showPairing && appState.effectiveSettingsProgress == 0)
                     .opacity(isSplashDone ? 1 : 0)
+                    .blur(radius: 10 * max(0, (appState.effectiveSettingsProgress - 0.3) / 0.7))
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                guard !appState.showSettingsDrawer else { return }
+                                let startX = value.startLocation.x
+                                let screenWidth = UIScreen.main.bounds.width
+                                if startX > screenWidth - 40 {
+                                    let translation = -value.translation.width
+                                    if translation > 0 {
+                                        appState.interactiveSettingsProgress = min(1.0, translation / screenWidth)
+                                    }
+                                }
+                            }
+                            .onEnded { value in
+                                guard !appState.showSettingsDrawer else { return }
+                                let startX = value.startLocation.x
+                                let screenWidth = UIScreen.main.bounds.width
+                                if startX > screenWidth - 40 {
+                                    let velocity = -value.velocity.width
+                                    let translation = -value.translation.width
+                                    if velocity > 500 || translation > screenWidth * 0.3 {
+                                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                                        generator.impactOccurred()
+                                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                            appState.interactiveSettingsProgress = nil
+                                            appState.showSettingsDrawer = true
+                                        }
+                                    } else {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                            appState.interactiveSettingsProgress = nil
+                                            appState.showSettingsDrawer = false
+                                        }
+                                    }
+                                }
+                            }
+                    )
 
                 if showSplash {
                     SplashView()
@@ -62,6 +108,10 @@ struct ClawOSApp: App {
                 PairingOverlay()
                     .environment(appState)
                     .zIndex(3)
+
+                SettingsDrawerOverlay()
+                    .environment(appState)
+                    .zIndex(4)
             }
             .background {
                 LinearGradient(
@@ -96,6 +146,15 @@ struct ClawOSApp: App {
             .onChange(of: appState.clawChatManager.linkState) { _, newState in
                 if case .connected = newState {
                     withAnimation { appState.showPairing = false }
+                }
+
+                if case .unpaired = newState {
+                    appState.clearAllGatewayData()
+                }
+
+                guard isSplashDone, showLogin != true else { return }
+                if PairingPresentationBehavior.shouldAutoPresent(for: newState) {
+                    withAnimation { appState.showPairing = true }
                 }
             }
             .onOpenURL { url in
