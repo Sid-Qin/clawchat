@@ -59,6 +59,16 @@ final class AppState {
     }
     var colorScheme: ColorScheme = .light
     var showPairing = false
+    var showSettingsDrawer = false
+    
+    var interactiveSettingsProgress: CGFloat? = nil
+    
+    var effectiveSettingsProgress: CGFloat {
+        if let progress = interactiveSettingsProgress {
+            return progress
+        }
+        return showSettingsDrawer ? 1.0 : 0.0
+    }
 
     let clawChatManager = ClawChatManager()
 
@@ -476,6 +486,21 @@ final class AppState {
         for i in agents.indices where agents[i].gatewayId == gatewayId {
             agents[i].status = .offline
         }
+    }
+
+    func clearAllGatewayData() {
+        gateways.removeAll()
+        agents.removeAll()
+        sessions.removeAll()
+        messagesBySession.removeAll()
+        agentStripItems.removeAll()
+        selectedAgentId = ""
+        selectedGatewayId = ""
+        selectedStripItemId = ""
+        skills.removeAll()
+        schedulePersistSessions()
+        schedulePersistMessages()
+        flushPendingStripPersistence()
     }
 
     // MARK: - Message Store
