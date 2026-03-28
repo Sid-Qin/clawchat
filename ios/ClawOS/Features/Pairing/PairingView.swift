@@ -1,6 +1,10 @@
 import SwiftUI
 import ClawChatKit
 
+enum PairingDefaults {
+    static let relayUrl = ""
+}
+
 // MARK: - Deep Link Parser
 
 enum PairingDeepLink {
@@ -84,6 +88,9 @@ struct PairingOverlay: View {
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
                     .presentationBackground(Color(.systemGroupedBackground))
+            }
+            .onChange(of: appState.showPairing) { _, show in
+                if show { KeyboardPrewarmer.warmUp() }
             }
     }
 }
@@ -234,8 +241,10 @@ struct ConnectionCardView: View {
                 .keyboardType(.URL)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .frame(height: 54)
+                .contentShape(Rectangle())
 
             Divider()
                 .padding(.leading, 16)
@@ -263,6 +272,7 @@ struct ConnectionCardView: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 54)
+            .contentShape(Rectangle())
         }
         .background(Color(uiColor: .systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -270,6 +280,7 @@ struct ConnectionCardView: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     private var relayForm: some View {
@@ -278,8 +289,10 @@ struct ConnectionCardView: View {
                 .keyboardType(.URL)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .frame(height: 54)
+                .contentShape(Rectangle())
 
             Divider()
                 .padding(.leading, 16)
@@ -287,8 +300,10 @@ struct ConnectionCardView: View {
             TextField("配对码", text: $pairingCode)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.characters)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .frame(height: 54)
+                .contentShape(Rectangle())
                 .onChange(of: pairingCode) { _, newValue in
                     let cleaned = newValue.replacingOccurrences(of: "-", with: "")
                     let capped = String(cleaned.prefix(6)).uppercased()
@@ -305,6 +320,7 @@ struct ConnectionCardView: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     // MARK: - Actions
@@ -323,6 +339,7 @@ struct ConnectionCardView: View {
                         Color(.secondarySystemGroupedBackground),
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                     )
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(isConnecting)
@@ -347,6 +364,7 @@ struct ConnectionCardView: View {
                     isFormValid ? accent : Color.gray.opacity(0.35),
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                 )
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!isFormValid || isConnecting)
@@ -429,10 +447,6 @@ struct ConnectionCardView: View {
             handleGatewayDeepLink(url, token)
         }
     }
-}
-
-enum PairingDefaults {
-    static let relayUrl = ""
 }
 
 // MARK: - QR Scanner Sheet

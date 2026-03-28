@@ -231,14 +231,26 @@ struct LegalDocumentSheet: View {
 
 // MARK: - Settings View
 
+enum SettingsDestination: Identifiable {
+    case theme
+    case memory
+    
+    var id: String {
+        switch self {
+        case .theme: return "theme"
+        case .memory: return "memory"
+        }
+    }
+}
+
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("isDarkMode") private var isDarkMode = false
     @State private var showLinkStart = false
     @State private var showPrivacyPolicy = false
     @State private var showTermsOfService = false
+    @State private var showLocalPairing = false
+    @State private var activeDestination: SettingsDestination? = nil
 
     private var theme: AppVisualTheme { appState.currentVisualTheme }
 
@@ -246,66 +258,50 @@ struct SettingsView: View {
         appState.selectedAgent
     }
 
-    private let bottomSafeAreaSpacing: CGFloat = 12
-
-    private var settingsHeader: some View {
-        HStack {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(theme.accent)
-                    .frame(width: 36, height: 36)
-                    .contentShape(Circle())
-            }
-
-            Spacer()
-
-            Text("设置")
-                .font(.system(size: 17, weight: .semibold))
-
-            Spacer()
-
-            Color.clear
-                .frame(width: 36, height: 36)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            settingsHeader
-
-            ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 28) {
-                    profileCard
-                    sectionBlock(title: "通用设置", cells: generalCells)
-                    sectionBlock(title: "Gateway 连接", cells: connectionCells)
-                    sectionBlock(title: "法律与隐私", cells: legalCells)
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 28) {
+                HStack {
+                    Button {
+                        let generator = UIImpactFeedbackGenerator(style: .light)
+                        generator.impactOccurred()
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            appState.showSettingsDrawer = false
+                        }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(theme.accent)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Spacer()
+                    
+                    Text("设置")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    
+                    Spacer()
+                    
+                    Color.clear.frame(width: 36, height: 36)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 20)
+                .padding(.bottom, -8)
+
+                profileCard
+                sectionBlock(title: "通用设置", cells: generalCells)
+                sectionBlock(title: "Gateway 连接", cells: connectionCells)
+                sectionBlock(title: "法律与隐私", cells: legalCells)
             }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear
-                .frame(height: bottomSafeAreaSpacing)
-                .allowsHitTesting(false)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
         }
         .background {
-            LinearGradient(
-                colors: [theme.pageGradientTop, theme.pageGradientBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            Color.clear
             .ignoresSafeArea()
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
-        .background(InteractivePopGestureEnabler())
         .sheet(isPresented: $showLinkStart) {
             LoginView { showLinkStart = false }
                 .environment(appState)
@@ -325,6 +321,41 @@ struct SettingsView: View {
                 document: LegalDocumentContentProvider.document(for: .termsOfService),
                 onClose: { showTermsOfService = false }
             )
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showLocalPairing) {
+            ConnectionCardView()
+                .environment(appState)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Color(.systemGroupedBackground))
+        }
+        .sheet(item: $activeDestination) { dest in
+            NavigationStack {
+                switch dest {
+                case .theme:
+                    ThemeSelectionView()
+                        .environment(appState)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("完成") {
+                                    activeDestination = nil
+                                }
+                            }
+                        }
+                case .memory:
+                    Text("Memory Management")
+                        .navigationTitle("长期记忆管理")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("完成") {
+                                    activeDestination = nil
+                                }
+                            }
+                        }
+                }
+            }
             .presentationDetents([.medium, .large])
         }
     }
@@ -355,7 +386,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color(.tertiaryLabel))
             }
             .padding(16)
-            .background(cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -363,24 +394,22 @@ struct SettingsView: View {
     // MARK: - Section Block
 
     private func sectionBlock(title: String, cells: [SettingsCellDescriptor]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(Color(.label))
+                .font(.subheadline)
+                .foregroundStyle(Color(.secondaryLabel))
                 .padding(.leading, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 8)
 
-            ForEach(Array(cells.enumerated()), id: \.element.id) { index, cell in
-                if index > 0 {
-                    Divider().padding(.leading, 52)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(cells.enumerated()), id: \.element.id) { index, cell in
+                    if index > 0 {
+                        Divider().padding(.leading, 56)
+                    }
+                    cellRow(cell)
                 }
-                cellRow(cell)
             }
-
-            Spacer().frame(height: 4)
+            .background(cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
-        .background(cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     // MARK: - Cell Row
@@ -389,9 +418,12 @@ struct SettingsView: View {
     private func cellRow(_ cell: SettingsCellDescriptor) -> some View {
         switch cell.kind {
         case .navigation(let destination):
-            NavigationLink { destination } label: {
+            Button {
+                activeDestination = destination
+            } label: {
                 cellContent(cell)
             }
+            .buttonStyle(.plain)
         case .toggle(let binding):
             HStack(spacing: 0) {
                 cellContent(cell, showsRightSpace: false)
@@ -420,7 +452,7 @@ struct SettingsView: View {
         HStack(spacing: 16) {
             Image(systemName: cell.icon)
                 .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(theme.accent)
+                .foregroundStyle(Color(.secondaryLabel))
                 .frame(width: 24, height: 24)
 
             Text(cell.title)
@@ -455,7 +487,7 @@ struct SettingsView: View {
     // MARK: - Card Background
 
     private var cardBackground: some ShapeStyle {
-        Color(.secondarySystemGroupedBackground)
+        Color(uiColor: .secondarySystemGroupedBackground)
     }
 
     // MARK: - Connection Helpers
@@ -496,7 +528,7 @@ struct SettingsView: View {
             SettingsCellDescriptor(
                 id: "theme", icon: "circle.lefthalf.filled", title: "视觉主题",
                 value: theme.displayName,
-                kind: .navigation(AnyView(ThemeSelectionView().environment(appState)))
+                kind: .navigation(.theme)
             ),
             SettingsCellDescriptor(
                 id: "model", icon: "cpu", title: "默认大语言模型",
@@ -538,7 +570,7 @@ struct SettingsView: View {
         } else {
             cells.append(SettingsCellDescriptor(
                 id: "pair", icon: "antenna.radiowaves.left.and.right", title: "连接 Gateway",
-                kind: .button { withAnimation { appState.showPairing = true } }
+                kind: .button { showLocalPairing = true }
             ))
         }
 
@@ -559,7 +591,7 @@ struct SettingsView: View {
             ),
             SettingsCellDescriptor(
                 id: "memory", icon: "brain.head.profile", title: "长期记忆管理",
-                kind: .navigation(AnyView(Text("Memory Management")))
+                kind: .navigation(.memory)
             ),
         ]
     }
@@ -577,7 +609,7 @@ private struct SettingsCellDescriptor: Identifiable {
     var kind: CellKind = .info
 
     enum CellKind {
-        case navigation(AnyView)
+        case navigation(SettingsDestination)
         case toggle(Binding<Bool>)
         case button(() -> Void)
         case destructiveButton(() -> Void)
@@ -625,31 +657,38 @@ struct ThemeSelectionView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        Form {
-            Section {
+        ScrollView {
+            VStack(spacing: 16) {
                 ForEach(AppVisualThemeID.allCases) { themeId in
                     let theme = AppVisualTheme.theme(for: themeId)
                     Button {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            appState.selectedVisualThemeID = themeId
-                        }
-                        UIApplication.shared.setAlternateIconName(themeId.alternateIconName)
+                        appState.selectedVisualThemeID = themeId
                         dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            UIApplication.shared.setAlternateIconName(themeId.alternateIconName)
+                        }
                     } label: {
                         HStack {
                             Text(theme.displayName)
-                                .foregroundStyle(.primary)
+                                .font(.system(size: 16))
+                                .foregroundStyle(Color(.label))
                             Spacer()
                             if themeId == appState.selectedVisualThemeID {
                                 Image(systemName: "checkmark")
-                                    .fontWeight(.semibold)
+                                    .font(.system(size: 16, weight: .semibold))
                                     .foregroundStyle(appState.currentVisualTheme.accent)
                             }
                         }
+                        .padding()
+                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
+                    .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 24)
         }
+        .background(Color(.systemGroupedBackground))
         .navigationTitle("选择视觉主题")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
