@@ -449,10 +449,6 @@ struct ConnectionCardView: View {
     }
 }
 
-enum PairingDefaults {
-    static let relayUrl = ""
-}
-
 // MARK: - QR Scanner Sheet
 
 private struct QRScannerSheet: View {
