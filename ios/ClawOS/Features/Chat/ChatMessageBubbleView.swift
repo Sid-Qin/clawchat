@@ -47,26 +47,36 @@ struct AgentAvatarView: View {
 }
 
 struct TypingBreathingDotsView: View {
-    var color: Color = Color(.systemGray3)
+    @State private var isAnimating = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .fill(color)
-                    .frame(width: 7, height: 7)
-                    .phaseAnimator([false, true]) { content, isExpanded in
-                        content
-                            .opacity(isExpanded ? 0.9 : 0.28)
-                            .scaleEffect(isExpanded ? 1.06 : 0.82)
-                    } animation: { _ in
-                        .easeInOut(duration: 0.6)
-                            .delay(Double(index) * 0.12)
-                            .repeatForever(autoreverses: true)
-                    }
+        Text("Thinking...")
+            .font(.system(size: 15, weight: .medium))
+            .foregroundStyle(Color(.systemGray4))
+            .overlay(
+                Text("Thinking...")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0.0),
+                                .init(color: .white, location: 0.5),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: 60)
+                        .offset(x: isAnimating ? 80 : -80)
+                    )
+            )
+            .onAppear {
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    isAnimating = true
+                }
             }
-        }
-        .frame(height: 12)
+            .frame(height: 20)
     }
 }
 

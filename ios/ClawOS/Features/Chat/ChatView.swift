@@ -282,10 +282,6 @@ struct ChatView: View {
                 TypingBreathingDotsView()
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(Color(.systemGray5))
-                    )
                 Spacer()
             }
             .padding(.horizontal, 16)
