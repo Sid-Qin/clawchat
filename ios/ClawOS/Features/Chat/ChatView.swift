@@ -411,10 +411,23 @@ struct ChatView: View {
     // MARK: - Input Bar
 
     private var inputBar: some View {
-        standardInputBar
-            .fixedSize(horizontal: false, vertical: true)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
+        VStack(spacing: 0) {
+            LinearGradient(
+                colors: [
+                    Color(.systemBackground).opacity(0),
+                    Color(.systemBackground)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 24)
+            .allowsHitTesting(false)
+
+            standardInputBar
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+        }
     }
 
     private var standardInputBar: some View {
@@ -453,12 +466,8 @@ struct ChatView: View {
     private let voiceCancelDragThreshold: CGFloat = 50
 
     private var inputBarBackground: some View {
-        Color(.systemBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .overlay(
-                Color.clear
-                    .adaptiveGlass(in: .rect(cornerRadius: 32, style: .continuous))
-            )
+        Color.clear
+            .adaptiveGlass(in: .rect(cornerRadius: 32, style: .continuous))
             .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 4)
             .shadow(color: .black.opacity(0.04), radius: 24, x: 0, y: 12)
             .shadow(color: .black.opacity(0.02), radius: 16, x: 0, y: 6)
