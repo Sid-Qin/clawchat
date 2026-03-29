@@ -457,6 +457,7 @@ struct ChatView: View {
             .adaptiveGlass(in: .rect(cornerRadius: 24))
             .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 4)
             .shadow(color: .black.opacity(0.04), radius: 24, x: 0, y: 12)
+            .shadow(color: .black.opacity(0.02), radius: 16, x: 0, y: 6)
     }
 
     private var attachmentButton: some View {
