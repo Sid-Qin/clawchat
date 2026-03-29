@@ -214,13 +214,21 @@ struct MessageBubbleView: View {
 
                 Text(timeString)
                     .font(.caption2)
-                    .foregroundStyle(isUser ? Color.white.opacity(0.7) : .secondary)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
+            .padding(.horizontal, isUser ? 16 : 0)
+            .padding(.vertical, isUser ? 12 : 4)
             .background(
-                RoundedRectangle(cornerRadius: bubbleRadius, style: .continuous)
-                    .fill(isUser ? theme.accent : Color(.systemGray5))
+                Group {
+                    if isUser {
+                        RoundedRectangle(cornerRadius: bubbleRadius, style: .continuous)
+                            .fill(Color(uiColor: .systemBackground))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: bubbleRadius, style: .continuous)
+                                    .strokeBorder(Color(.systemGray4), lineWidth: 0.5)
+                            )
+                    }
+                }
             )
 
             if !isUser { Spacer(minLength: 64) }
@@ -278,12 +286,12 @@ struct MessageBubbleView: View {
                     }
                     Spacer(minLength: 0)
                 }
-                .foregroundStyle(isUserBubble ? Color.white : Color.primary)
+                .foregroundStyle(Color.primary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(isUserBubble ? Color.white.opacity(0.18) : Color(.systemBackground).opacity(0.6))
+                        .fill(Color(.systemGray6))
                 )
             }
         }
