@@ -36,6 +36,7 @@ struct ChatView: View {
         scrollsToBottomOnReplace: true
     )
     @State private var isNearBottom = true
+    @State private var isLoadingMessages = true
 
     private let hapticRigid = UIImpactFeedbackGenerator(style: .rigid)
     private let hapticSoft = UIImpactFeedbackGenerator(style: .soft)
@@ -128,7 +129,14 @@ struct ChatView: View {
 
             VStack(spacing: 0) {
                 connectionBanner
-                messageArea
+                if isLoadingMessages {
+                    Spacer()
+                    ProgressView()
+                        .tint(.secondary)
+                    Spacer()
+                } else {
+                    messageArea
+                }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 inputBar
@@ -168,7 +176,12 @@ struct ChatView: View {
         .onAppear {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             syncSelectedModel()
-            refreshMessageSnapshot()
+            Task {
+                refreshMessageSnapshot()
+                withAnimation(.easeOut(duration: 0.2)) {
+                    isLoadingMessages = false
+                }
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 hapticRigid.prepare()
                 hapticSoft.prepare()
@@ -440,8 +453,12 @@ struct ChatView: View {
     private let voiceCancelDragThreshold: CGFloat = 50
 
     private var inputBarBackground: some View {
-        Color.clear
-            .adaptiveGlass(in: .rect(cornerRadius: 32, style: .continuous))
+        Color(.systemBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+            .overlay(
+                Color.clear
+                    .adaptiveGlass(in: .rect(cornerRadius: 32, style: .continuous))
+            )
             .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 4)
             .shadow(color: .black.opacity(0.04), radius: 24, x: 0, y: 12)
             .shadow(color: .black.opacity(0.02), radius: 16, x: 0, y: 6)
