@@ -562,9 +562,6 @@ struct ChatView: View {
     private var activeRecordingField: some View {
         HStack(spacing: 6) {
             Spacer(minLength: 0)
-            Image(systemName: "arrow.uturn.left.circle.fill")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Color.red.opacity(0.85))
 
             Text("松开以取消")
                 .font(.system(size: 15, weight: .medium))
@@ -925,6 +922,7 @@ struct ChatView: View {
 
         do {
             try speechService.startRecording()
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             withAnimation(voiceActionAnimation) {
                 isVoiceStarting = false
                 isVoiceRecording = true
