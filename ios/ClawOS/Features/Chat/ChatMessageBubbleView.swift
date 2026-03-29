@@ -84,59 +84,12 @@ struct TypewriterText: View {
     let text: String
     let isStreaming: Bool
     
-    @State private var displayedCharCount: Int
-    @State private var timer: Timer? = nil
-    
-    init(text: String, isStreaming: Bool) {
-        self.text = text
-        self.isStreaming = isStreaming
-        _displayedCharCount = State(initialValue: text.count)
-    }
-    
     var body: some View {
-        Text(displayedText)
+        Text(text)
             .font(.body)
             .lineSpacing(2)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
-            .opacity(isStreaming ? 0.85 : 1.0)
-            .onChange(of: text) { oldText, newText in
-                if isStreaming {
-                    displayedCharCount = newText.count
-                } else if oldText.isEmpty && !newText.isEmpty {
-                    displayedCharCount = 0
-                    startTypewriter()
-                } else {
-                    displayedCharCount = newText.count
-                }
-            }
-            .onDisappear {
-                timer?.invalidate()
-                timer = nil
-            }
-    }
-    
-    private var displayedText: String {
-        if isStreaming || displayedCharCount >= text.count {
-            return text
-        }
-        let index = text.index(text.startIndex, offsetBy: displayedCharCount, limitedBy: text.endIndex) ?? text.endIndex
-        return String(text[..<index])
-    }
-    
-    private func startTypewriter() {
-        timer?.invalidate()
-        let duration: TimeInterval = min(2.0, max(0.5, Double(text.count) * 0.02))
-        let interval = duration / Double(text.count)
-        
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-            if displayedCharCount < text.count {
-                displayedCharCount += 1
-            } else {
-                timer?.invalidate()
-                timer = nil
-            }
-        }
     }
 }
 

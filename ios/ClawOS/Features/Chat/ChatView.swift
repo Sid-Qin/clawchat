@@ -36,7 +36,6 @@ struct ChatView: View {
         scrollsToBottomOnReplace: true
     )
     @State private var isNearBottom = true
-    @State private var isLoadingMessages = true
 
     private let hapticRigid = UIImpactFeedbackGenerator(style: .rigid)
     private let hapticSoft = UIImpactFeedbackGenerator(style: .soft)
@@ -129,14 +128,7 @@ struct ChatView: View {
 
             VStack(spacing: 0) {
                 connectionBanner
-                if isLoadingMessages {
-                    Spacer()
-                    ProgressView()
-                        .tint(.secondary)
-                    Spacer()
-                } else {
-                    messageArea
-                }
+                messageArea
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 inputBar
@@ -176,12 +168,7 @@ struct ChatView: View {
         .onAppear {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             syncSelectedModel()
-            Task {
-                refreshMessageSnapshot()
-                withAnimation(.easeOut(duration: 0.2)) {
-                    isLoadingMessages = false
-                }
-            }
+            refreshMessageSnapshot()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 hapticRigid.prepare()
                 hapticSoft.prepare()
@@ -196,6 +183,13 @@ struct ChatView: View {
         }
         .onChange(of: renderSyncSignature) { _, _ in
             refreshMessageSnapshot()
+        }
+        .onChange(of: isInputFocused) { _, focused in
+            if focused {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    refreshMessageSnapshot(forceScrollToBottom: true, animated: true)
+                }
+            }
         }
         .photosPicker(
             isPresented: $showPhotoPicker,
@@ -412,22 +406,31 @@ struct ChatView: View {
 
     private var inputBar: some View {
         VStack(spacing: 0) {
-            LinearGradient(
-                colors: [
-                    Color(.systemBackground).opacity(0),
-                    Color(.systemBackground)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 24)
-            .allowsHitTesting(false)
+            if !isNearBottom {
+                HStack {
+                    Spacer()
+                    Button {
+                        refreshMessageSnapshot(forceScrollToBottom: true, animated: true)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color(.secondaryLabel))
+                            .frame(width: 32, height: 32)
+                            .background(Color(.systemBackground), in: Circle())
+                            .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 4)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                }
+                .animation(.easeInOut(duration: 0.2), value: isNearBottom)
+            }
 
             standardInputBar
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
         }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     private var standardInputBar: some View {
