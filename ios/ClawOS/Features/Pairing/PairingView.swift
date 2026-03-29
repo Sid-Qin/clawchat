@@ -66,13 +66,13 @@ enum PairingPresentationBehavior {
 
 enum PairingSheetLayoutMetrics {
     static let logoSize: CGFloat = 48
-    static let headerSpacing: CGFloat = 16
-    static let headerTopPadding: CGFloat = 24
-    static let headerBottomPadding: CGFloat = 20
-    static let modePickerBottomPadding: CGFloat = 28
+    static let headerSpacing: CGFloat = 20
+    static let headerTopPadding: CGFloat = 56
+    static let headerBottomPadding: CGFloat = 32
+    static let modePickerBottomPadding: CGFloat = 32
     static let contentHorizontalPadding: CGFloat = 24
-    static let actionRowTopPadding: CGFloat = 120
-    static let actionRowBottomPadding: CGFloat = 20
+    static let actionRowTopPadding: CGFloat = 40
+    static let actionRowBottomPadding: CGFloat = 40
 }
 
 // MARK: - Floating Card Overlay (used at app root)
