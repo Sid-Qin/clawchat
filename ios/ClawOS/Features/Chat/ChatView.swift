@@ -36,7 +36,6 @@ struct ChatView: View {
         scrollsToBottomOnReplace: true
     )
     @State private var isNearBottom = true
-    @State private var isInitialLoading = true
 
     private let hapticRigid = UIImpactFeedbackGenerator(style: .rigid)
     private let hapticSoft = UIImpactFeedbackGenerator(style: .soft)
@@ -135,12 +134,7 @@ struct ChatView: View {
                 inputBar
             }
 
-            if isInitialLoading {
-                ProgressView()
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(.systemBackground))
-            } else if isEmpty {
+            if isEmpty {
                 emptyStateOverlay
                     .allowsHitTesting(false)
                     .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -174,17 +168,7 @@ struct ChatView: View {
         .onAppear {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             syncSelectedModel()
-            
-            // Fast loading indicator for first open
-            Task {
-                // Yield to let the loading spinner render immediately
-                try? await Task.sleep(for: .milliseconds(50))
-                refreshMessageSnapshot()
-                withAnimation {
-                    isInitialLoading = false
-                }
-            }
-            
+            refreshMessageSnapshot()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 hapticRigid.prepare()
                 hapticSoft.prepare()
@@ -456,7 +440,7 @@ struct ChatView: View {
     private let voiceCancelDragThreshold: CGFloat = 50
 
     private var inputBarBackground: some View {
-        Color(.systemBackground)
+        Color.clear
             .adaptiveGlass(in: .rect(cornerRadius: 32, style: .continuous))
             .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 4)
             .shadow(color: .black.opacity(0.04), radius: 24, x: 0, y: 12)
