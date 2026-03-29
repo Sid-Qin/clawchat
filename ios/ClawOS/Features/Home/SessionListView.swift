@@ -215,6 +215,7 @@ struct SessionRowContainer: View {
         }
         .alert("修改名字", isPresented: $showRenameAlert) {
             TextField("会话名称", text: $newSessionTitle)
+                .foregroundStyle(.primary)
             Button("取消", role: .cancel) {
                 closeSwipe(animated: true)
             }
@@ -248,12 +249,11 @@ struct SessionRowContainer: View {
         return HStack(spacing: 0) {
             Button {
                 selectionHaptic.selectionChanged()
-                newSessionTitle = session.title
-                showRenameAlert = true
+                togglePin()
             } label: {
                 ZStack {
                     Color.indigo
-                    Image(systemName: "pencil")
+                    Image(systemName: session.isPinned ? "pin.slash.fill" : "pin.fill")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(.white)
                         .opacity(pinOpacity)
