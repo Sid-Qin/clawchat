@@ -46,6 +46,7 @@ struct SessionListView: View {
     // MARK: - List
 
     @State private var selectedSession: Session?
+    @State private var lastVisitedSessionId: String?
     @State private var activeSwipeId: String?
 
     private var sessionList: some View {
@@ -54,11 +55,12 @@ struct SessionListView: View {
                 ForEach(filteredSessions) { session in
                     SessionRowContainer(
                         session: session,
+                        isSelected: lastVisitedSessionId == session.id,
                         activeSwipeId: $activeSwipeId
                     ) {
+                        lastVisitedSessionId = session.id
                         selectedSession = session
                     }
-                    
                 }
 
                 if filteredSessions.isEmpty {
@@ -143,6 +145,7 @@ struct SessionListView: View {
 struct SessionRowContainer: View {
     @Environment(AppState.self) private var appState
     let session: Session
+    var isSelected: Bool = false
     @Binding var activeSwipeId: String?
     var onTap: () -> Void = {}
 
@@ -173,8 +176,8 @@ struct SessionRowContainer: View {
             actionButtons
             foregroundRow
         }
-        .frame(height: 76)
-        .clipped()
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
         .contextMenu {
             Button {
                 selectionHaptic.selectionChanged()
@@ -261,7 +264,7 @@ struct SessionRowContainer: View {
             .opacity(metrics.deleteWidth > 2 ? 1 : 0.001)
         }
         .frame(width: railWidth, alignment: .trailing)
-        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .opacity(metrics.stage == .closed ? 0 : 1)
     }
@@ -269,14 +272,12 @@ struct SessionRowContainer: View {
     // MARK: - Foreground Row
 
     private var foregroundRow: some View {
-        SessionRowView(session: session)
-            .background(appState.currentVisualTheme.rowFill.opacity(0.001))
-            .contentShape(Rectangle())
-            .offset(x: offset)
-            .highPriorityGesture(swipeGesture)
-            .onTapGesture {
-                handleRowTap()
-            }
+        Button(action: handleRowTap) {
+            SessionRowView(session: session)
+        }
+        .buttonStyle(SessionRowButtonStyle(offset: offset, isSelected: isSelected))
+        .highPriorityGesture(swipeGesture)
+        .id(session.id)
     }
 
     private var swipeGesture: some Gesture {
@@ -394,6 +395,21 @@ struct SessionRowContainer: View {
         }
 
         lastHapticStage = nextStage
+    }
+}
+
+struct SessionRowButtonStyle: ButtonStyle {
+    var offset: CGFloat
+    var isSelected: Bool = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(configuration.isPressed || isSelected ? Color(.systemGray6) : Color.clear)
+            )
+            .offset(x: offset)
+            .animation(.easeInOut(duration: 0.15), value: isSelected)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 
@@ -528,63 +544,38 @@ struct SessionRowView: View {
     private var theme: AppVisualTheme { appState.currentVisualTheme }
 
     var body: some View {
-        HStack(spacing: 12) {
-            AgentAvatarView(
-                agentId: agent?.id,
-                avatar: agent?.avatar,
-                theme: theme,
-                size: 40
-            )
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text(agent?.name ?? "Unknown")
-                        .font(.body)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Text(session.timeAgo)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(session.title.isEmpty ? (agent?.name ?? "新会话") : session.title)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(Color(.label))
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                if session.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(.tertiaryLabel))
+                        .rotationEffect(.degrees(45))
                 }
-
-                if let lastMessage = session.lastMessage {
-                    Text(lastMessage)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                
+                if session.unreadCount > 0 {
+                    Text("\(session.unreadCount)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .frame(minWidth: 18, minHeight: 18)
+                        .background(theme.accent, in: Capsule())
                 }
             }
-
-            if session.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(45))
-            }
-
-            if session.unreadCount > 0 {
-                Text("\(session.unreadCount)")
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .frame(minWidth: 20, minHeight: 20)
-                    .background(theme.accent, in: Capsule())
-            }
+            
+            Text(session.timeAgo)
+                .font(.system(size: 13))
+                .foregroundStyle(Color(.secondaryLabel))
         }
-        .padding(.horizontal, AppTheme.Spacing.lg)
+        .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
-                .fill(theme.rowFill)
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppTheme.Radius.md, style: .continuous)
-                        .stroke(theme.rowStroke, lineWidth: 0.5)
-                )
-        )
-        .padding(.horizontal, AppTheme.Spacing.sm)
-        .padding(.vertical, 2)
         .contentShape(Rectangle())
     }
 }

@@ -36,13 +36,8 @@ struct HomeView: View {
         }
         .environment(dragCoordinator)
         .background {
-            LinearGradient(
-                colors: [appState.currentVisualTheme.pageGradientTop,
-                         appState.currentVisualTheme.pageGradientBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            Color(.systemBackground)
+                .ignoresSafeArea()
         }
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -116,7 +111,7 @@ struct HomeView: View {
 
             Image(systemName: "square.and.pencil")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(appState.currentVisualTheme.accent)
                 .frame(
                     width: AppTheme.Chrome.controlDiameter,
                     height: AppTheme.Chrome.controlDiameter
@@ -183,7 +178,7 @@ struct HomeView: View {
         } label: {
             Image(systemName: gwTypeIcon)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color(.label))
                 .frame(
                     width: AppTheme.Chrome.controlDiameter,
                     height: AppTheme.Chrome.controlDiameter
@@ -194,6 +189,7 @@ struct HomeView: View {
                         .offset(x: 0, y: 0)
                 }
         }
+        .tint(Color(.label))
     }
 
     private var connectionDot: some View {
