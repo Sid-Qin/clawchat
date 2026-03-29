@@ -71,7 +71,7 @@ enum PairingSheetLayoutMetrics {
     static let headerBottomPadding: CGFloat = 20
     static let modePickerBottomPadding: CGFloat = 28
     static let contentHorizontalPadding: CGFloat = 24
-    static let actionRowTopPadding: CGFloat = 32
+    static let actionRowTopPadding: CGFloat = 120
     static let actionRowBottomPadding: CGFloat = 20
 }
 
@@ -155,7 +155,7 @@ struct ConnectionCardView: View {
                             .foregroundStyle(accent)
 
                         Text("连接 Gateway")
-                            .font(.title2.weight(.bold))
+                            .font(.title.weight(.bold))
                     }
                     .padding(.top, PairingSheetLayoutMetrics.headerTopPadding)
                     .padding(.bottom, PairingSheetLayoutMetrics.headerBottomPadding)
