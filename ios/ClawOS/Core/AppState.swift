@@ -416,6 +416,12 @@ final class AppState {
         }
     }
 
+    func renameSession(id: String, title: String) {
+        if let index = sessions.firstIndex(where: { $0.id == id }) {
+            sessions[index].title = title
+        }
+    }
+
     func updateAgentAvatar(id: String, avatar: String) {
         guard let idx = agents.firstIndex(where: { $0.id == id }) else { return }
         agents[idx].avatar = avatar

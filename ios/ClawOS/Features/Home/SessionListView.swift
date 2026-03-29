@@ -153,6 +153,8 @@ struct SessionRowContainer: View {
     @State private var initialDragOffset: CGFloat = 0
     @State private var isDragging = false
     @State private var showDeleteConfirm = false
+    @State private var showRenameAlert = false
+    @State private var newSessionTitle = ""
     @State private var lastHapticStage: SessionSwipeStage = .closed
 
     private let selectionHaptic = UISelectionFeedbackGenerator()
@@ -181,12 +183,10 @@ struct SessionRowContainer: View {
         .contextMenu {
             Button {
                 selectionHaptic.selectionChanged()
-                togglePin()
+                newSessionTitle = session.title
+                showRenameAlert = true
             } label: {
-                Label(
-                    session.isPinned ? "取消置顶" : "置顶会话",
-                    systemImage: session.isPinned ? "pin.slash" : "pin"
-                )
+                Label("修改名字", systemImage: "pencil")
             }
 
             Divider()
@@ -213,6 +213,19 @@ struct SessionRowContainer: View {
         } message: {
             Text("该会话将被永久删除，无法恢复。")
         }
+        .alert("修改名字", isPresented: $showRenameAlert) {
+            TextField("会话名称", text: $newSessionTitle)
+            Button("取消", role: .cancel) {
+                closeSwipe(animated: true)
+            }
+            Button("保存") {
+                let trimmed = newSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    appState.renameSession(id: session.id, title: trimmed)
+                }
+                closeSwipe(animated: true)
+            }
+        }
         .onChange(of: showDeleteConfirm) { _, isPresented in
             if !isPresented {
                 closeSwipe(animated: true)
@@ -235,11 +248,12 @@ struct SessionRowContainer: View {
         return HStack(spacing: 0) {
             Button {
                 selectionHaptic.selectionChanged()
-                togglePin()
+                newSessionTitle = session.title
+                showRenameAlert = true
             } label: {
                 ZStack {
                     Color.indigo
-                    Image(systemName: session.isPinned ? "pin.slash.fill" : "pin.fill")
+                    Image(systemName: "pencil")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(.white)
                         .opacity(pinOpacity)
@@ -405,7 +419,7 @@ struct SessionRowButtonStyle: ButtonStyle {
         configuration.label
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(configuration.isPressed || isSelected ? Color(.systemGray6) : Color.clear)
+                    .fill(configuration.isPressed || isSelected ? Color(.systemGray6).opacity(0.5) : Color.clear)
             )
             .offset(x: offset)
             .animation(.easeInOut(duration: 0.15), value: isSelected)
