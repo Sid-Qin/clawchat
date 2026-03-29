@@ -50,11 +50,11 @@ struct TypingBreathingDotsView: View {
     @State private var isAnimating = false
 
     var body: some View {
-        Text("Thinking...")
+        Text("Typing...")
             .font(.system(size: 15, weight: .medium))
             .foregroundStyle(Color(.systemGray4))
             .overlay(
-                Text("Thinking...")
+                Text("Typing...")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.primary)
                     .mask(
@@ -220,11 +220,16 @@ struct MessageBubbleView: View {
                         .foregroundStyle(item.isError ? .red : .primary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
+                        .if(item.isStreaming && !isUser) { view in
+                            view.opacity(0.85)
+                        }
                 }
 
-                Text(timeString)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if !isUser {
+                    Text(timeString)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, isUser ? 16 : 0)
             .padding(.vertical, isUser ? 12 : 4)
