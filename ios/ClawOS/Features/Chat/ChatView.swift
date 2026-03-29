@@ -166,6 +166,7 @@ struct ChatView: View {
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             syncSelectedModel()
             refreshMessageSnapshot()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -226,6 +227,7 @@ struct ChatView: View {
             Text(speechPermissionMessage)
         }
         .onDisappear {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             voiceFinalizeTask?.cancel()
             isWalkieTalkieRecording = false
             isVoiceStarting = false
