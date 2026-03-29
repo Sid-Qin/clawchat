@@ -416,8 +416,7 @@ struct ChatView: View {
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Color(.secondaryLabel))
                             .frame(width: 32, height: 32)
-                            .background(Color(.systemBackground), in: Circle())
-                            .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
+                            .background(Color.clear.adaptiveGlass(in: .circle))
                     }
                     .padding(.trailing, 16)
                     .padding(.bottom, 4)
