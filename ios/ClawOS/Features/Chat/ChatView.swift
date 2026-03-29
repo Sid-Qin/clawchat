@@ -123,12 +123,8 @@ struct ChatView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [currentTheme.pageGradientTop, currentTheme.pageGradientBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            Color(.systemBackground)
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 connectionBanner
@@ -158,23 +154,16 @@ struct ChatView: View {
                 Button {
                     dismiss()
                 } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 17, weight: .semibold))
-
-                        AgentAvatarView(
-                            agentId: agent?.id,
-                            avatar: agent?.avatar,
-                            theme: currentTheme,
-                            size: 20,
-                            showsBackground: false
-                        )
-                    }
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color(.label))
+                        .frame(width: AppTheme.Chrome.controlDiameter, height: AppTheme.Chrome.controlDiameter)
+                        .contentShape(Circle())
                 }
-                .tint(.primary)
+                .buttonStyle(.plain)
             }
         }
-        .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             syncSelectedModel()
@@ -454,7 +443,7 @@ struct ChatView: View {
 
     private var inputBarBackground: some View {
         Color.clear
-            .adaptiveGlass(in: .rect(cornerRadius: 24))
+            .adaptiveGlass(in: .rect(cornerRadius: 32, style: .continuous))
             .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 4)
             .shadow(color: .black.opacity(0.04), radius: 24, x: 0, y: 12)
             .shadow(color: .black.opacity(0.02), radius: 16, x: 0, y: 6)
@@ -473,14 +462,14 @@ struct ChatView: View {
                 Label("文件", systemImage: "doc")
             }
         } label: {
-            Image(systemName: "paperclip")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(currentTheme.accent)
+            Image(systemName: "plus")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color(.label))
                 .frame(width: 32, height: 32)
+                .background(Color(.systemGray6).opacity(0.5), in: Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .adaptiveGlass(in: .circle)
     }
 
     // MARK: - Input Field
@@ -595,7 +584,7 @@ struct ChatView: View {
     }
 
     private var textField: some View {
-        let placeholder = isVoiceActive ? "正在聆听…" : "输入消息或长按录音..."
+        let placeholder = isVoiceActive ? "正在聆听…" : "Ask Anything"
         return TextField(placeholder, text: $inputText, axis: .vertical)
             .lineLimit(isVoiceActive ? 1...1 : 1...6)
             .textFieldStyle(.plain)
@@ -670,26 +659,25 @@ struct ChatView: View {
             } label: {
                 modelChip(showChevron: true)
             }
-            .adaptiveGlass(in: .capsule)
         } else {
             modelChip(showChevron: false)
-                .adaptiveGlass(in: .capsule)
         }
     }
 
     private func modelChip(showChevron: Bool) -> some View {
         HStack(spacing: 4) {
             Text(modelDisplayTitle(for: selectedModel))
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
             if showChevron {
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .semibold))
             }
         }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
+        .foregroundStyle(Color(.label))
+        .padding(.horizontal, 12)
         .frame(height: 30)
+        .background(Color(.systemGray6).opacity(0.5), in: Capsule())
         .contentShape(Capsule())
     }
 
