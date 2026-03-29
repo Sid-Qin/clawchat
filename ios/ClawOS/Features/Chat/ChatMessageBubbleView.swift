@@ -84,8 +84,14 @@ struct TypewriterText: View {
     let text: String
     let isStreaming: Bool
     
-    @State private var displayedCharCount: Int = 0
+    @State private var displayedCharCount: Int
     @State private var timer: Timer? = nil
+    
+    init(text: String, isStreaming: Bool) {
+        self.text = text
+        self.isStreaming = isStreaming
+        _displayedCharCount = State(initialValue: text.count)
+    }
     
     var body: some View {
         Text(displayedText)
@@ -96,29 +102,12 @@ struct TypewriterText: View {
             .opacity(isStreaming ? 0.85 : 1.0)
             .onChange(of: text) { oldText, newText in
                 if isStreaming {
-                    // Real streaming updates naturally, just show all available text
                     displayedCharCount = newText.count
                 } else if oldText.isEmpty && !newText.isEmpty {
-                    // Non-streaming message arriving for the first time
                     displayedCharCount = 0
                     startTypewriter()
-                } else if displayedCharCount >= newText.count {
-                    // Already fully displayed
+                } else {
                     displayedCharCount = newText.count
-                }
-            }
-            .onAppear {
-                if isStreaming {
-                    displayedCharCount = text.count
-                } else if !text.isEmpty {
-                    // If it mounts with text already present, we assume it's fully loaded history
-                    // We only want typewriter effect on *new* incoming non-streaming messages
-                    // However, we can't easily distinguish "just received" from "scrolled into view"
-                    // without tracking message readiness globally.
-                    // For now, if we mount and text is present and we're not streaming, just show it.
-                    // The onChange logic above will catch the specific case of an empty message
-                    // becoming full (which happens during the transition from Typing... to done).
-                    displayedCharCount = text.count
                 }
             }
             .onDisappear {
@@ -137,7 +126,6 @@ struct TypewriterText: View {
     
     private func startTypewriter() {
         timer?.invalidate()
-        // Speed: faster for longer text so it doesn't take forever, but reasonable for short text
         let duration: TimeInterval = min(2.0, max(0.5, Double(text.count) * 0.02))
         let interval = duration / Double(text.count)
         
