@@ -220,9 +220,7 @@ struct MessageBubbleView: View {
                         .foregroundStyle(item.isError ? .red : .primary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
-                        .if(item.isStreaming && !isUser) { view in
-                            view.opacity(0.85)
-                        }
+                        .opacity(item.isStreaming && !isUser ? 0.85 : 1.0)
                 }
 
                 if !isUser {
