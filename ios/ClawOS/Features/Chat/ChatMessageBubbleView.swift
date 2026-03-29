@@ -207,7 +207,7 @@ struct MessageBubbleView: View {
                     Text(item.text)
                         .font(.body)
                         .lineSpacing(2)
-                        .foregroundStyle(isUser ? .white : (item.isError ? .red : .primary))
+                        .foregroundStyle(item.isError ? .red : .primary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }

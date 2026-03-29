@@ -94,7 +94,7 @@ struct AgentHubView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, AppTheme.Spacing.xl)
+        .padding(.horizontal, 16)
         .padding(.top, AppTheme.Chrome.headerTopInset)
         .padding(.bottom, AppTheme.Chrome.headerBottomInset)
     }
@@ -146,12 +146,13 @@ struct AgentHubView: View {
                         .offset(x: 0, y: 0)
                 }
         }
+        .tint(Color(.label))
     }
 
     private func headerControlIcon(systemName: String) -> some View {
         Image(systemName: systemName)
             .font(.system(size: 16, weight: .medium))
-            .foregroundStyle(.primary)
+            .foregroundStyle(Color(.label))
             .frame(
                 width: AppTheme.Chrome.controlDiameter,
                 height: AppTheme.Chrome.controlDiameter
