@@ -65,13 +65,13 @@ enum PairingPresentationBehavior {
 }
 
 enum PairingSheetLayoutMetrics {
-    static let logoSize: CGFloat = 64
+    static let logoSize: CGFloat = 48
     static let headerSpacing: CGFloat = 16
-    static let headerTopPadding: CGFloat = 40
-    static let headerBottomPadding: CGFloat = 32
-    static let modePickerBottomPadding: CGFloat = 45
+    static let headerTopPadding: CGFloat = 24
+    static let headerBottomPadding: CGFloat = 20
+    static let modePickerBottomPadding: CGFloat = 28
     static let contentHorizontalPadding: CGFloat = 24
-    static let actionRowTopPadding: CGFloat = 60
+    static let actionRowTopPadding: CGFloat = 32
     static let actionRowBottomPadding: CGFloat = 20
 }
 
@@ -87,7 +87,7 @@ struct PairingOverlay: View {
                     .environment(appState)
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
-                    .presentationBackground(Color(.systemGroupedBackground))
+                    .presentationBackground(Color(.systemBackground))
             }
             .onChange(of: appState.showPairing) { _, show in
                 if show { KeyboardPrewarmer.warmUp() }
@@ -177,7 +177,7 @@ struct ConnectionCardView: View {
                 .padding(.horizontal, PairingSheetLayoutMetrics.contentHorizontalPadding)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Color(.systemGroupedBackground))
+            .background(Color(.systemBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -275,12 +275,12 @@ struct ConnectionCardView: View {
             .contentShape(Rectangle())
         }
         .background(Color(uiColor: .systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color(.systemGray5), lineWidth: 1)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private var relayForm: some View {
@@ -315,12 +315,12 @@ struct ConnectionCardView: View {
                 }
         }
         .background(Color(uiColor: .systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color(uiColor: .separator).opacity(0.5), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color(.systemGray5), lineWidth: 1)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     // MARK: - Actions
@@ -336,8 +336,8 @@ struct ConnectionCardView: View {
                     .frame(width: 50, height: 50)
                     .foregroundStyle(accent)
                     .background(
-                        Color(.secondarySystemGroupedBackground),
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        Color(.systemGray6).opacity(0.5),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                     )
                     .contentShape(Rectangle())
             }
@@ -362,7 +362,7 @@ struct ConnectionCardView: View {
                 .foregroundStyle(.white)
                 .background(
                     isFormValid ? accent : Color.gray.opacity(0.35),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
                 )
                 .contentShape(Rectangle())
             }
@@ -380,7 +380,7 @@ struct ConnectionCardView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     // MARK: - Connection Logic
