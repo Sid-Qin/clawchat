@@ -35,5 +35,9 @@
       "help": "OpenClaw session key for incoming messages (default: clawchat).",
       "advanced": true
     }
+  },
+  "security": {
+    "reviewed": true,
+    "notes": "bin/clawchat.mjs uses child_process to execute 'openclaw' CLI for plugin installation (authorized use case). Token access is required for relay authentication."
   }
 }

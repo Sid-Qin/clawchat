@@ -32,10 +32,22 @@ function runCommand(command, args = []) {
 // Config helpers (read/write ~/.openclaw/openclaw.json directly)
 // ---------------------------------------------------------------------------
 
-const CONFIG_DIR = process.env.OPENCLAW_STATE_DIR
-  ? path.resolve(process.env.OPENCLAW_STATE_DIR)
-  : path.join(os.homedir(), ".openclaw");
-const CONFIG_PATH = path.join(CONFIG_DIR, "openclaw.json");
+function getConfigPath() {
+  // 1. --config flag
+  const configIdx = process.argv.indexOf("--config");
+  if (configIdx > -1 && process.argv[configIdx + 1]) {
+    return path.resolve(process.argv[configIdx + 1]);
+  }
+  // 2. OPENCLAW_STATE_DIR env var
+  if (process.env.OPENCLAW_STATE_DIR) {
+    return path.join(path.resolve(process.env.OPENCLAW_STATE_DIR), "openclaw.json");
+  }
+  // 3. default
+  return path.join(os.homedir(), ".openclaw", "openclaw.json");
+}
+
+const CONFIG_PATH = getConfigPath();
+const CONFIG_DIR = path.dirname(CONFIG_PATH);
 const EXTENSIONS_DIR = path.join(CONFIG_DIR, "extensions");
 const PLUGIN_ID = "clawchat";
 const NPM_PACKAGE = "@claw-os/clawchat";
@@ -158,26 +170,31 @@ async function install() {
   writeConfig(freshConfig);
   console.log("  ✓ Updated openclaw.json");
 
-  // 5. Restart gateway first (plugin must connect to relay before pairing)
-  console.log("  ⏳ Restarting gateway...");
-  try {
-    runCommand("openclaw", ["gateway", "restart"]);
-    console.log("  ✓ Gateway restarted");
-  } catch {
-    console.log("  ⚠ Could not restart gateway. Run manually:");
-    console.log("    openclaw gateway restart");
-    console.log("  Then run: npx @claw-os/clawchat pair");
+  // 5. Restart gateway (plugin must connect to relay before pairing)
+  //    SKIP_GATEWAY_RESTART=1 — skip when caller manages gateway lifecycle (e.g. ClawOS)
+  if (process.env.SKIP_GATEWAY_RESTART === "1") {
+    console.log("  ✓ Skipping gateway restart (managed externally)");
+  } else {
+    console.log("  ⏳ Restarting gateway...");
+    try {
+      runCommand("openclaw", ["gateway", "restart"]);
+      console.log("  ✓ Gateway restarted");
+    } catch {
+      console.log("  ⚠ Could not restart gateway. Run manually:");
+      console.log("    openclaw gateway restart");
+      console.log("  Then run: npx @claw-os/clawchat pair");
+      console.log("");
+      return;
+    }
+
+    // 6. Wait for plugin to connect to relay and register
+    console.log("  ⏳ Waiting for gateway to register...");
+    await new Promise((r) => setTimeout(r, 3000));
+
+    // 7. Get pairing code and show QR
+    await showPairingQR(relay, token);
     console.log("");
-    return;
   }
-
-  // 6. Wait for plugin to connect to relay and register
-  console.log("  ⏳ Waiting for gateway to register...");
-  await new Promise((r) => setTimeout(r, 3000));
-
-  // 7. Get pairing code and show QR
-  await showPairingQR(relay, token);
-  console.log("");
 }
 
 async function pair() {
@@ -224,9 +241,20 @@ switch (command) {
   case "pair":
     await pair();
     break;
+  case "--help":
+  case "-h":
+    console.log("Usage:");
+    console.log("  npx @claw-os/clawchat install [--config PATH]  — install and configure");
+    console.log("  npx @claw-os/clawchat pair [--config PATH]     — generate pairing QR code");
+    console.log("");
+    console.log("Options:");
+    console.log("  --config PATH    Path to openclaw.json (default: ~/.openclaw/openclaw.json)");
+    console.log("                   Can also set OPENCLAW_STATE_DIR env var");
+    break;
   default:
     console.log("Usage:");
-    console.log("  npx @claw-os/clawchat install  — install and configure");
-    console.log("  npx @claw-os/clawchat pair     — generate pairing QR code");
+    console.log("  npx @claw-os/clawchat install [--config PATH]  — install and configure");
+    console.log("  npx @claw-os/clawchat pair [--config PATH]     — generate pairing QR code");
+    console.log("  npx @claw-os/clawchat --help                  — show help");
     process.exit(1);
 }
