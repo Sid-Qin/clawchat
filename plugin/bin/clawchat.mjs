@@ -170,26 +170,31 @@ async function install() {
   writeConfig(freshConfig);
   console.log("  ✓ Updated openclaw.json");
 
-  // 5. Restart gateway first (plugin must connect to relay before pairing)
-  console.log("  ⏳ Restarting gateway...");
-  try {
-    runCommand("openclaw", ["gateway", "restart"]);
-    console.log("  ✓ Gateway restarted");
-  } catch {
-    console.log("  ⚠ Could not restart gateway. Run manually:");
-    console.log("    openclaw gateway restart");
-    console.log("  Then run: npx @claw-os/clawchat pair");
+  // 5. Restart gateway (plugin must connect to relay before pairing)
+  //    SKIP_GATEWAY_RESTART=1 — skip when caller manages gateway lifecycle (e.g. ClawOS)
+  if (process.env.SKIP_GATEWAY_RESTART === "1") {
+    console.log("  ✓ Skipping gateway restart (managed externally)");
+  } else {
+    console.log("  ⏳ Restarting gateway...");
+    try {
+      runCommand("openclaw", ["gateway", "restart"]);
+      console.log("  ✓ Gateway restarted");
+    } catch {
+      console.log("  ⚠ Could not restart gateway. Run manually:");
+      console.log("    openclaw gateway restart");
+      console.log("  Then run: npx @claw-os/clawchat pair");
+      console.log("");
+      return;
+    }
+
+    // 6. Wait for plugin to connect to relay and register
+    console.log("  ⏳ Waiting for gateway to register...");
+    await new Promise((r) => setTimeout(r, 3000));
+
+    // 7. Get pairing code and show QR
+    await showPairingQR(relay, token);
     console.log("");
-    return;
   }
-
-  // 6. Wait for plugin to connect to relay and register
-  console.log("  ⏳ Waiting for gateway to register...");
-  await new Promise((r) => setTimeout(r, 3000));
-
-  // 7. Get pairing code and show QR
-  await showPairingQR(relay, token);
-  console.log("");
 }
 
 async function pair() {
